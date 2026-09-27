@@ -9,7 +9,7 @@ export default function CustomerOrderPage() {
   const [menuItems, setMenuItems] = useState([]);
   const [buffetOptions, setBuffetOptions] = useState([]);
   const [activeCategory, setActiveCategory] = useState('flavor');
-  const [quantities, setQuantities] = useState({}); // { optionId: count }
+  const [quantities, setQuantities] = useState({});
   const [loading, setLoading] = useState(true);
   const [message, setMessage] = useState('');
 
@@ -23,7 +23,6 @@ export default function CustomerOrderPage() {
   const loadData = async (tableNum) => {
     setLoading(true);
     try {
-      // 1. ดึง ID โต๊ะ
       const { data: tableData } = await supabase
         .from('tables')
         .select('*')
@@ -31,7 +30,6 @@ export default function CustomerOrderPage() {
         .single();
 
       if (tableData) {
-        // 2. ดึง Session ที่เปิดอยู่
         const { data: sessionData } = await supabase
           .from('sessions')
           .select('*')
@@ -42,7 +40,6 @@ export default function CustomerOrderPage() {
         if (sessionData) setSessionId(sessionData.id);
       }
 
-      // 3. ดึงตัวเลือกบุฟเฟ่ต์
       const { data: options } = await supabase
         .from('buffet_options')
         .select('*')
@@ -61,7 +58,6 @@ export default function CustomerOrderPage() {
     }
   };
 
-  // เพิ่ม / ลด จำนวนรายการ
   const updateQuantity = (id, delta) => {
     setQuantities(prev => {
       const current = prev[id] || 0;
@@ -76,17 +72,15 @@ export default function CustomerOrderPage() {
     });
   };
 
-  // คำนวณจำนวนรายการทั้งหมดในตะกร้า
   const totalCount = Object.values(quantities).reduce((sum, q) => sum + q, 0);
 
-  // ส่งรายการสั่งไอติม / ท็อปปิ้ง / ซอส
   const handleSendOrder = async () => {
     if (!sessionId) {
-      alert('โต๊ะนี้ยังไม่ได้ทำการเปิดระบบ กรุณาติดต่อพนักงานครับ');
+      alert('โต๊ะนี้ยังไม่ได้ทำการเปิดระบบ กรุณาติดต่อพนักงานครับ 🐾');
       return;
     }
     if (totalCount === 0) {
-      alert('กรุณาเลือกอย่างน้อย 1 รายการครับ');
+      alert('กรุณาเลือกอย่างน้อย 1 รายการครับ 🍦');
       return;
     }
 
@@ -125,8 +119,9 @@ export default function CustomerOrderPage() {
         await supabase.from('order_item_options').insert(optionRows);
       }
 
-      setMessage('✅ ส่งรายการเรียบร้อยแล้ว!');
+      setMessage('✨ ส่งรายการให้เชฟแมวเรียบร้อยแล้วเหมียว! 🐱');
       setQuantities({});
+      setTimeout(() => setMessage(''), 4000);
     } catch (err) {
       alert('เกิดข้อผิดพลาด: ' + err.message);
     } finally {
@@ -134,68 +129,83 @@ export default function CustomerOrderPage() {
     }
   };
 
-  // เรียกเก็บเงิน
   const handleCallBill = async () => {
-    if (confirm('คุณต้องการเรียกเก็บเงินใช่หรือไม่?')) {
-      alert('แจ้งพนักงานเรียกเก็บเงินเรียบร้อยแล้วครับ!');
+    if (confirm('คุณต้องการเรียกพนักงานเช็คบิลใช่ไหมเหมียว? 🐱')) {
+      alert('แจ้งพนักงานให้แล้วครับ รอสักครู่นะครับ 🐾');
     }
   };
 
   if (loading) return (
-    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', color: '#666' }}>
-      กำลังโหลดเมนู...
+    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF0F5', color: '#FF5C8A', fontFamily: 'sans-serif' }}>
+      <div style={{ fontSize: 48, marginBottom: 12 }}>🐱🍦</div>
+      <div style={{ fontWeight: 'bold', fontSize: 16 }}>กำลังโหลดเมนูไอติมแสนอร่อย...</div>
     </div>
   );
 
   const categories = [
-    { key: 'flavor', label: 'ไอติม (รส)' },
-    { key: 'topping', label: 'ท็อปปิ้ง' },
-    { key: 'sauce', label: 'ซอส' },
-    { key: 'drink', label: 'เครื่องดื่ม' },
+    { key: 'flavor', label: '🍦 ไอติม (รส)' },
+    { key: 'topping', label: '🍡 ท็อปปิ้ง' },
+    { key: 'sauce', label: '🍯 ซอส' },
+    { key: 'drink', label: '🥤 เครื่องดื่ม' },
   ];
 
   const filteredOptions = buffetOptions.filter(o => o.category === activeCategory);
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#ffffff', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', color: '#111111' }}>
+    <div style={{ minHeight: '100vh', backgroundColor: '#FFF5F7', fontFamily: '-apple-system, BlinkMacSystemFont, "Kanit", "Mitr", sans-serif', color: '#4A2E35' }}>
       
-      {/* Container ใหญ่ตรงกลาง */}
       <div style={{ maxWidth: 680, margin: '0 auto', padding: '20px 20px 120px 20px', boxSizing: 'border-box' }}>
         
-        {/* Header เลขโต๊ะ + ปุ่มเรียกเก็บเงิน */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid #f0f0f0' }}>
-          <div>
-            <div style={{ fontSize: 13, color: '#888888', fontWeight: '500' }}>โต๊ะ</div>
-            <div style={{ fontSize: 32, fontWeight: '800', lineHeight: '1.1', color: '#111111' }}>{tableNumber}</div>
+        {/* Header โต๊ะ + น้องแมว */}
+        <div style={{
+          display: 'flex',
+          justify: 'space-between',
+          alignItems: 'center',
+          marginBottom: 20,
+          padding: '16px 20px',
+          backgroundColor: '#FFFFFF',
+          borderRadius: 24,
+          boxShadow: '0 4px 16px rgba(255, 182, 193, 0.3)',
+          border: '2px solid #FFC6D9'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 36 }}>🐱</span>
+            <div>
+              <div style={{ fontSize: 13, color: '#885060', fontWeight: 'bold' }}>โต๊ะของคุณ</div>
+              <div style={{ fontSize: 26, fontWeight: '800', color: '#FF5C8A', lineHeight: '1' }}>
+                โต๊ะ {tableNumber}
+              </div>
+            </div>
           </div>
+
           <button 
             onClick={handleCallBill}
             style={{ 
               padding: '10px 18px', 
-              borderRadius: 30, 
-              border: '1px solid #e0e0e0', 
-              backgroundColor: '#ffffff', 
+              borderRadius: 20, 
+              border: '2px solid #FFB3C6', 
+              backgroundColor: '#FFF0F3', 
+              color: '#FF4D6D',
               fontSize: 14, 
-              fontWeight: '600', 
+              fontWeight: 'bold', 
               cursor: 'pointer', 
               display: 'flex', 
               alignItems: 'center', 
-              gap: 6,
-              boxShadow: '0 2px 6px rgba(0,0,0,0.04)'
+              gap: 6
             }}>
-            💰 เรียกเก็บเงิน
+            💰 เรียกเช็คบิล
           </button>
         </div>
 
-        {/* ข้อความแจ้งเตือนเมื่อส่งออเดอร์สำเร็จ */}
+        {/* ข้อความแจ้งเตือน */}
         {message && (
-          <div style={{ padding: '14px 18px', backgroundColor: '#e8f5e9', color: '#2e7d32', borderRadius: 12, marginBottom: 20, textAlign: 'center', fontWeight: '600', fontSize: 15 }}>
+          <div style={{ padding: '14px 18px', backgroundColor: '#E8F5E9', color: '#2E7D32', borderRadius: 16, marginBottom: 20, textAlign: 'center', fontWeight: 'bold', border: '1.5px solid #C8E6C9' }}>
             {message}
           </div>
         )}
 
-        {/* แถบปุ่มเลือกหมวดหมู่ */}
-        <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 12, marginBottom: 20, scrollbarWidth: 'none' }}>
+        {/* หมวดหมู่ (Tabs) */}
+        <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 12, marginBottom: 16, scrollbarWidth: 'none' }}>
           {categories.map(cat => {
             const isActive = activeCategory === cat.key;
             return (
@@ -203,15 +213,16 @@ export default function CustomerOrderPage() {
                 key={cat.key}
                 onClick={() => setActiveCategory(cat.key)}
                 style={{ 
-                  padding: '10px 22px', 
-                  borderRadius: 25, 
-                  border: 'none', 
+                  padding: '10px 20px', 
+                  borderRadius: 20, 
+                  border: isActive ? 'none' : '1.5px solid #FFC6D9', 
                   whiteSpace: 'nowrap',
-                  backgroundColor: isActive ? '#111111' : '#f2f2f4', 
-                  color: isActive ? '#ffffff' : '#444444', 
+                  backgroundColor: isActive ? '#FF7597' : '#FFFFFF', 
+                  color: isActive ? '#FFFFFF' : '#663B47', 
                   fontSize: 14,
-                  fontWeight: '600',
-                  cursor: 'pointer'
+                  fontWeight: 'bold',
+                  cursor: 'pointer',
+                  boxShadow: isActive ? '0 4px 12px rgba(255, 117, 151, 0.3)' : 'none'
                 }}>
                 {cat.label}
               </button>
@@ -219,11 +230,11 @@ export default function CustomerOrderPage() {
           })}
         </div>
 
-        {/* รายการเมนูตามหมวดหมู่ */}
-        <div style={{ display: 'flex', flexDirection: 'column' }}>
+        {/* รายการอาหาร */}
+        <div style={{ backgroundColor: '#FFFFFF', borderRadius: 24, padding: '12px 20px', border: '2px solid #FFC6D9', boxShadow: '0 4px 16px rgba(255, 182, 193, 0.2)' }}>
           {filteredOptions.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '40px 0', color: '#888888' }}>
-              ยังไม่มีรายการในหมวดหมู่นี้
+            <div style={{ textAlign: 'center', padding: '40px 0', color: '#A06B78' }}>
+              🐾 ยังไม่มีรายการในหมวดนี้เหมียว
             </div>
           ) : (
             filteredOptions.map((item, idx) => {
@@ -235,29 +246,25 @@ export default function CustomerOrderPage() {
                     display: 'flex', 
                     justify: 'space-between', 
                     alignItems: 'center', 
-                    width: '100%',
-                    padding: '18px 0', 
-                    borderBottom: idx === filteredOptions.length - 1 ? 'none' : '1px solid #f2f2f4',
-                    boxSizing: 'border-box'
+                    padding: '16px 0', 
+                    borderBottom: idx === filteredOptions.length - 1 ? 'none' : '1px solid #FFE4EC'
                   }}>
                   
-                  {/* ชื่อรายการ */}
-                  <span style={{ fontSize: 16, fontWeight: '700', color: '#111111', flex: 1, paddingRight: 16 }}>
-                    {item.name}
+                  <span style={{ fontSize: 16, fontWeight: 'bold', color: '#4A2E35' }}>
+                    🍦 {item.name}
                   </span>
                   
-                  {/* ตัวควบคุมจำนวน */}
                   {qty > 0 ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <button 
                         onClick={() => updateQuantity(item.id, -1)}
                         style={{
-                          width: 34,
-                          height: 34,
+                          width: 32,
+                          height: 32,
                           borderRadius: '50%',
-                          border: '1.5px solid #111111',
-                          backgroundColor: '#ffffff',
-                          color: '#111111',
+                          border: '2px solid #FF7597',
+                          backgroundColor: '#FFF0F3',
+                          color: '#FF7597',
                           fontSize: 18,
                           fontWeight: 'bold',
                           cursor: 'pointer',
@@ -268,18 +275,18 @@ export default function CustomerOrderPage() {
                         }}>
                         -
                       </button>
-                      <span style={{ fontSize: 16, fontWeight: '700', minWidth: 20, textAlign: 'center' }}>
+                      <span style={{ fontSize: 16, fontWeight: 'bold', minWidth: 20, textAlign: 'center', color: '#FF4D6D' }}>
                         {qty}
                       </span>
                       <button 
                         onClick={() => updateQuantity(item.id, 1)}
                         style={{
-                          width: 34,
-                          height: 34,
+                          width: 32,
+                          height: 32,
                           borderRadius: '50%',
                           border: 'none',
-                          backgroundColor: '#111111',
-                          color: '#ffffff',
+                          backgroundColor: '#FF7597',
+                          color: '#FFFFFF',
                           fontSize: 18,
                           fontWeight: 'bold',
                           cursor: 'pointer',
@@ -295,14 +302,15 @@ export default function CustomerOrderPage() {
                     <button 
                       onClick={() => updateQuantity(item.id, 1)}
                       style={{ 
-                        padding: '8px 20px', 
-                        borderRadius: 20, 
+                        padding: '8px 18px', 
+                        borderRadius: 16, 
                         border: 'none', 
-                        backgroundColor: '#111111', 
-                        color: '#ffffff', 
+                        backgroundColor: '#FF7597', 
+                        color: '#FFFFFF', 
                         fontSize: 14,
-                        fontWeight: '700',
-                        cursor: 'pointer'
+                        fontWeight: 'bold',
+                        cursor: 'pointer',
+                        boxShadow: '0 2px 8px rgba(255, 117, 151, 0.3)'
                       }}>
                       + เพิ่ม
                     </button>
@@ -315,7 +323,7 @@ export default function CustomerOrderPage() {
 
       </div>
 
-      {/* แถบตะกร้าลอยอยู่ด้านล่างสุด */}
+      {/* แถบตะกร้าลอยด้านล่าง */}
       {totalCount > 0 && (
         <div style={{ 
           position: 'fixed', 
@@ -331,20 +339,20 @@ export default function CustomerOrderPage() {
             style={{ 
               width: '100%', 
               padding: '16px 24px', 
-              borderRadius: 16, 
+              borderRadius: 20, 
               border: 'none', 
-              backgroundColor: '#111111', 
-              color: '#ffffff', 
+              backgroundColor: '#FF4D6D', 
+              color: '#FFFFFF', 
               fontSize: 16, 
-              fontWeight: '700', 
-              boxShadow: '0 8px 24px rgba(0,0,0,0.22)', 
+              fontWeight: 'bold', 
+              boxShadow: '0 8px 24px rgba(255, 77, 109, 0.4)', 
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
               gap: 8
             }}>
-            🧺 ตะกร้า ({totalCount} รายการ) — แตะเพื่อส่งออเดอร์
+            🧺 สั่งเลย ({totalCount} รายการ) — ส่งให้อาจารย์แมว 🐾
           </button>
         </div>
       )}
