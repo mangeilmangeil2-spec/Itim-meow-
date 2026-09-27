@@ -16,6 +16,9 @@ export default function HomePage() {
   const [origin, setOrigin] = useState('');
   const [copied, setCopied] = useState(false);
 
+  // รายการโต๊ะในระบบ (1-15)
+  const availableTables = Array.from({ length: 15 }, (_, i) => i + 1);
+
   useEffect(() => {
     if (typeof window !== 'undefined') {
       setOrigin(window.location.origin);
@@ -24,14 +27,14 @@ export default function HomePage() {
 
   const handleOpenTable = async (e) => {
     e.preventDefault();
-    if (!tableNumber || tableNumber.trim() === '') {
-      alert('กรุณากรอกเลขโต๊ะก่อนครับ 🐾');
+    if (!tableNumber) {
+      alert('กรุณาเลือกเลขโต๊ะก่อนครับ 🐾');
       return;
     }
 
     setLoading(true);
     try {
-      const cleanTableNum = tableNumber.trim();
+      const cleanTableNum = String(tableNumber);
 
       let { data: tableData } = await supabase
         .from('tables')
@@ -181,19 +184,19 @@ export default function HomePage() {
           </h2>
 
           <form onSubmit={handleOpenTable} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            
+            {/* ดร็อปดาวน์เลือกเลขโต๊ะ */}
             <div>
               <label style={{ display: 'block', textAlign: 'center', fontWeight: 'bold', fontSize: 15, color: '#663B47', marginBottom: 8 }}>
-                🏷️ เลขโต๊ะ
+                🏷️ เลือกเลขโต๊ะ
               </label>
-              <input
-                type="text"
-                placeholder="เช่น 1"
+              <select
                 value={tableNumber}
                 onChange={(e) => setTableNumber(e.target.value)}
                 required
                 style={{
                   width: '100%',
-                  padding: '12px 16px',
+                  padding: '14px 16px',
                   borderRadius: 16,
                   border: '2px solid #FFC6D9',
                   backgroundColor: '#FFF9FA',
@@ -202,9 +205,19 @@ export default function HomePage() {
                   boxSizing: 'border-box',
                   outline: 'none',
                   textAlign: 'center',
-                  color: '#FF5C8A'
+                  color: tableNumber ? '#FF5C8A' : '#A06B78',
+                  cursor: 'pointer',
+                  WebkitAppearance: 'none',
+                  textAlignLast: 'center'
                 }}
-              />
+              >
+                <option value="" disabled>-- เลือกโต๊ะ --</option>
+                {availableTables.map((num) => (
+                  <option key={num} value={num} style={{ color: '#4A2E35', fontWeight: 'bold' }}>
+                    โต๊ะ {num}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
