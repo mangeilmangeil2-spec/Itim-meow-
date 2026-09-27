@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { supabase } from '../lib/supabase';
 
@@ -10,36 +10,46 @@ export default function HomePage() {
 
   // ข้อมูลฟอร์ม
   const [tableNumber, setTableNumber] = useState('');
-  const [adults, setAdults] = useState(0);
-  const [childrenCount, setChildrenCount] = useState(0);
+  const [adults, setAdults] = useState('0');
+  const [childrenCount, setChildrenCount] = useState('0');
 
   const [loading, setLoading] = useState(false);
   const [qrUrl, setQrUrl] = useState('');
+  const [origin, setOrigin] = useState('');
   const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      setOrigin(window.location.origin);
+    }
+  }, []);
 
   // ฟังก์ชันกดเปิดโต๊ะ
   const handleOpenTable = async (e) => {
     e.preventDefault();
-    if (!tableNumber) {
-      alert('กรุณากรอกเลขโต๊ะ');
+    if (!tableNumber || tableNumber.trim() === '') {
+      alert('กรุณากรอกเลขโต๊ะก่อนครับ');
       return;
     }
 
     setLoading(true);
     try {
+      const cleanTableNum = tableNumber.trim();
+
       // 1. เช็คหรือสร้างโต๊ะในฐานข้อมูล
       let { data: tableData } = await supabase
         .from('tables')
         .select('*')
-        .eq('table_number', tableNumber)
+        .eq('table_number', cleanTableNum)
         .maybeSingle();
 
       if (!tableData) {
         const { data: newTable, error: createError } = await supabase
           .from('tables')
-          .insert([{ table_number: tableNumber }])
+          .insert([{ table_number: cleanTableNum }])
           .select()
           .single();
+
         if (createError) throw createError;
         tableData = newTable;
       }
@@ -47,31 +57,44 @@ export default function HomePage() {
       // 2. ปิด Session เก่าของโต๊ะนี้ (ถ้ามี)
       await supabase
         .from('sessions')
-        .update({ status: 'closed', closed_at: new Date() })
+        .update({ status: 'closed', closed_at: new Date().toISOString() })
         .eq('table_id', tableData.id)
         .eq('status', 'open');
 
       // 3. สร้าง Session ใหม่สำหรับโต๊ะนี้
-      const totalHeadcount = Number(adults) + Number(childrenCount);
-      const { data: sessionData, error: sessionError } = await supabase
+      const totalHeadcount = (parseInt(adults) || 0) + (parseInt(childrenCount) || 0);
+
+      let { data: sessionData, error: sessionError } = await supabase
         .from('sessions')
         .insert([{
           table_id: tableData.id,
-          headcount: totalHeadcount || 1,
+          headcount: totalHeadcount > 0 ? totalHeadcount : 1,
           status: 'open'
         }])
         .select()
-        .single();
+        .maybeSingle();
 
-      if (sessionError) throw sessionError;
+      // ถ้าระบบแจ้ง Error เรื่องฟิลด์ headcount ให้ fallback ไปสร้าง session แบบปกติ
+      if (sessionError) {
+        const { error: retryError } = await supabase
+          .from('sessions')
+          .insert([{
+            table_id: tableData.id,
+            status: 'open'
+          }]);
+
+        if (retryError) throw retryError;
+      }
 
       // 4. สร้าง URL สำหรับสั่งอาหารประจำโต๊ะ
-      const orderUrl = `${window.location.origin}/order?table=${tableNumber}`;
+      const currentOrigin = origin || window.location.origin;
+      const orderUrl = `${currentOrigin}/order?table=${encodeURIComponent(cleanTableNum)}`;
       setQrUrl(orderUrl);
       setStep('success');
 
     } catch (err) {
-      alert('เกิดข้อผิดพลาด: ' + err.message);
+      console.error('Error:', err);
+      alert('เกิดข้อผิดพลาด: ' + (err.message || 'โปรดลองใหม่อีกครั้ง'));
     } finally {
       setLoading(false);
     }
@@ -79,9 +102,11 @@ export default function HomePage() {
 
   // คัดลอกลิงก์
   const handleCopyLink = () => {
-    navigator.clipboard.writeText(qrUrl);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (qrUrl) {
+      navigator.clipboard.writeText(qrUrl);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   return (
@@ -95,11 +120,11 @@ export default function HomePage() {
       padding: '20px'
     }}>
 
-      {/* ================= STEP 1: หน้าแรกสุด (รูปที่ 1) ================= */}
+      {/* ================= STEP 1: หน้าแรกสุด ================= */}
       {step === 'home' && (
         <div style={{ textAlign: 'center', maxWidth: 400, width: '100%' }}>
           <h1 style={{ fontSize: 32, fontWeight: '800', color: '#111', marginBottom: 12 }}>
-            บุฟเฟต์ขนมไทย
+            บุฟเฟต์ไอติม
           </h1>
           <p style={{ fontSize: 16, color: '#666', marginBottom: 32 }}>
             ระบบสั่งอาหารและจัดการออเดอร์หน้าร้าน
@@ -137,7 +162,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* ================= STEP 2: หน้าฟอร์มเปิดโต๊ะ (รูปที่ 2) ================= */}
+      {/* ================= STEP 2: หน้าฟอร์มเปิดโต๊ะ ================= */}
       {step === 'form' && (
         <div style={{
           backgroundColor: '#fff',
@@ -149,7 +174,7 @@ export default function HomePage() {
           boxSizing: 'border-box'
         }}>
           <h2 style={{ fontSize: 24, fontWeight: '800', textAlign: 'center', color: '#111', marginBottom: 24 }}>
-            เปิดโต๊ะบุฟเฟต์ขนมไทย
+            เปิดโต๊ะบุฟเฟต์ไอติม
           </h2>
 
           <form onSubmit={handleOpenTable} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -162,6 +187,7 @@ export default function HomePage() {
                 placeholder="เช่น 1"
                 value={tableNumber}
                 onChange={(e) => setTableNumber(e.target.value)}
+                required
                 style={{
                   width: '100%',
                   padding: '12px 16px',
@@ -169,7 +195,8 @@ export default function HomePage() {
                   border: '1px solid #e0e0e0',
                   fontSize: 16,
                   boxSizing: 'border-box',
-                  outline: 'none'
+                  outline: 'none',
+                  textAlign: 'center'
                 }}
               />
             </div>
@@ -190,7 +217,8 @@ export default function HomePage() {
                   border: '1px solid #e0e0e0',
                   fontSize: 16,
                   boxSizing: 'border-box',
-                  outline: 'none'
+                  outline: 'none',
+                  textAlign: 'center'
                 }}
               />
             </div>
@@ -211,33 +239,51 @@ export default function HomePage() {
                   border: '1px solid #e0e0e0',
                   fontSize: 16,
                   boxSizing: 'border-box',
-                  outline: 'none'
+                  outline: 'none',
+                  textAlign: 'center'
                 }}
               />
             </div>
 
-            <button
-              type="submit"
-              disabled={loading}
-              style={{
-                marginTop: 10,
-                width: '100%',
-                padding: '14px',
-                borderRadius: 10,
-                border: 'none',
-                backgroundColor: '#111',
-                color: '#fff',
-                fontSize: 16,
-                fontWeight: 'bold',
-                cursor: 'pointer'
-              }}>
-              {loading ? 'กำลังเปิดโต๊ะ...' : 'เปิดโต๊ะ'}
-            </button>
+            <div style={{ display: 'flex', gap: 10, marginTop: 10 }}>
+              <button
+                type="button"
+                onClick={() => setStep('home')}
+                style={{
+                  flex: 1,
+                  padding: '14px',
+                  borderRadius: 10,
+                  border: '1px solid #ccc',
+                  backgroundColor: '#fff',
+                  color: '#333',
+                  fontSize: 15,
+                  fontWeight: 'bold',
+                  cursor: 'pointer'
+                }}>
+                ย้อนกลับ
+              </button>
+              <button
+                type="submit"
+                disabled={loading}
+                style={{
+                  flex: 2,
+                  padding: '14px',
+                  borderRadius: 10,
+                  border: 'none',
+                  backgroundColor: '#111',
+                  color: '#fff',
+                  fontSize: 16,
+                  fontWeight: 'bold',
+                  cursor: 'pointer'
+                }}>
+                {loading ? 'กำลังเปิดโต๊ะ...' : 'เปิดโต๊ะ'}
+              </button>
+            </div>
           </form>
         </div>
       )}
 
-      {/* ================= STEP 3: หน้าแสดง QR Code (รูปที่ 3) ================= */}
+      {/* ================= STEP 3: หน้าแสดง QR Code ================= */}
       {step === 'success' && (
         <div style={{
           backgroundColor: '#fff',
@@ -257,7 +303,6 @@ export default function HomePage() {
             โต๊ะ {tableNumber} | ผู้ใหญ่ {adults} ท่าน | เด็ก/นักศึกษา {childrenCount} ท่าน
           </p>
 
-          {/* QR Code Generator API */}
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
             <img
               src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrUrl)}`}
@@ -299,8 +344,8 @@ export default function HomePage() {
               onClick={() => {
                 setStep('form');
                 setTableNumber('');
-                setAdults(0);
-                setChildrenCount(0);
+                setAdults('0');
+                setChildrenCount('0');
               }}
               style={{
                 width: '100%',
