@@ -1,18 +1,25 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { supabase } from '../../lib/supabase'; // ปรับ path ตามโครงสร้างโฟลเดอร์ของคุณ
+import { supabase } from '../../lib/supabase'; // ปรับ Path ให้ตรงกับไฟล์ supabase.js ของคุณ
 
+// 1. หมวดหมู่รายการอาหาร
+const categories = [
+  { key: 'flavor', label: '🍦 ไอติม (รส)' },
+  { key: 'topping', label: '🍡 ท็อปปิ้ง' },
+  { key: 'sauce', label: '🍯 ซอส' },
+  { key: 'drink', label: '🥤 เครื่องดื่ม' },
+];
 
-// 1. ฟังก์ชันตัดสติ๊กเกอร์เดิมที่อาจติดมาในชื่อเมนูออกก่อน
+// 2. ฟังก์ชันตัดอีโมจิเก่าที่ติดมากับชื่อเมนูในฐานข้อมูลออก
 const cleanName = (name) => {
   if (!name) return '';
-  // ลบไอคอนอีโมจิที่อยู่หน้าข้อความออกทั้งหมด
-  return name.replace(/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\s]+/gu, '').trim();
+  // ลบอีโมจิและช่องว่างที่ติดอยู่หน้าชื่อรายการ
+  return name.replace(/^[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\s]+/gu, '').trim();
 };
 
-// 2. ฟังก์ชันเลือกสติ๊กเกอร์ตามหมวดหมู่ (เช็กครอบคลุมทุกแบบ)
+// 3. ฟังก์ชันเลือกสติ๊กเกอร์ตามหมวดหมู่ที่เลือก
 const getCategoryIcon = (category) => {
   if (!category) return '🍦';
   const cat = String(category).toLowerCase().trim();
@@ -25,7 +32,7 @@ const getCategoryIcon = (category) => {
   return '🍦';
 };
 
-export default function OrderPage() {
+function OrderComponent() {
   const searchParams = useSearchParams();
   const sessionId = searchParams?.get('session_id');
 
@@ -35,7 +42,7 @@ export default function OrderPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // ดึงข้อมูลเมนูอาหารจาก Supabase
+  // ดึงข้อมูลรายการอาหารจาก Supabase
   useEffect(() => {
     async function fetchOptions() {
       try {
@@ -57,10 +64,19 @@ export default function OrderPage() {
     fetchOptions();
   }, []);
 
-  // กรองรายการตามหมวดหมู่ที่เลือกอยู่
-  const filteredOptions = buffetOptions.filter(
-    (o) => o.category === activeCategory
-  );
+  // กรองรายการอาหารตามหมวดหมู่ที่เลือก (รองรับทั้งภาษาไทยและอังกฤษ)
+  const filteredOptions = buffetOptions.filter((o) => {
+    if (!o.category) return false;
+    const itemCat = String(o.category).toLowerCase().trim();
+    const activeCat = String(activeCategory).toLowerCase().trim();
+
+    if (activeCat === 'flavor') return itemCat.includes('flavor') || itemCat.includes('ไอติม') || itemCat.includes('รส');
+    if (activeCat === 'topping') return itemCat.includes('topping') || itemCat.includes('ท็อปปิ้ง');
+    if (activeCat === 'sauce') return itemCat.includes('sauce') || itemCat.includes('ซอส');
+    if (activeCat === 'drink') return itemCat.includes('drink') || itemCat.includes('เครื่องดื่ม') || itemCat.includes('น้ำ');
+
+    return itemCat === activeCat;
+  });
 
   // ฟังก์ชันเลือก / ยกเลิกรายการ
   const toggleSelectOption = (option) => {
@@ -74,17 +90,17 @@ export default function OrderPage() {
     });
   };
 
-  // ฟังก์ชันส่งออเดอร์
+  // ฟังก์ชันส่งออเดอร์เข้าครัว
   const handleSubmitOrder = async () => {
     if (selectedOptions.length === 0) {
-      alert('กรุณาเลือกรายการอาหารก่อนสั่งเหมียว! 🐾');
+      alert('กรุณาเลือกรายการอาหารก่อนส่งออเดอร์เหมียว! 🐾');
       return;
     }
 
     try {
       setSubmitting(true);
 
-      // 1. สร้าง Order
+      // 1. สร้าง Record ในตาราง orders
       const { data: orderData, error: orderErr } = await supabase
         .from('orders')
         .insert([{ session_id: sessionId ? parseInt(sessionId) : null, status: 'pending' }])
@@ -93,7 +109,7 @@ export default function OrderPage() {
 
       if (orderErr) throw orderErr;
 
-      // 2. สร้าง Order Item
+      // 2. สร้าง Record ในตาราง order_items
       const { data: itemData, error: itemErr } = await supabase
         .from('order_items')
         .insert([{ order_id: orderData.id, quantity: 1 }])
@@ -102,7 +118,7 @@ export default function OrderPage() {
 
       if (itemErr) throw itemErr;
 
-      // 3. สร้าง Order Item Options
+      // 3. สร้าง Record ในตาราง order_item_options
       const optionInserts = selectedOptions.map((opt) => ({
         order_item_id: itemData.id,
         option_id: opt.id,
@@ -114,7 +130,7 @@ export default function OrderPage() {
 
       if (optErr) throw optErr;
 
-      alert('ส่งออเดอร์เรียบร้อยแล้วเหมียว! 🍦🎉');
+      alert('ส่งออเดอร์ให้ห้องครัวเรียบร้อยแล้วเหมียว! 🍨🎉');
       setSelectedOptions([]);
     } catch (err) {
       console.error('Submit order error:', err);
@@ -143,7 +159,7 @@ export default function OrderPage() {
     }}>
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
         
-        {/* หัวข้อหน้า */}
+        {/* Header */}
         <div style={{ textAlign: 'center', marginBottom: 20 }}>
           <h1 style={{ fontSize: 24, fontWeight: '800', color: '#FF5C8A', margin: 0 }}>
             🍨 เลือกเมนูไอศกรีม & ท็อปปิ้ง
@@ -153,7 +169,7 @@ export default function OrderPage() {
           </p>
         </div>
 
-        {/* แถบปุ่มเลือกหมวดหมู่ */}
+        {/* แถบหมวดหมู่ */}
         <div style={{
           display: 'flex',
           gap: 8,
@@ -187,7 +203,7 @@ export default function OrderPage() {
           })}
         </div>
 
-        {/* กล่องแสดงรายการอาหารตามหมวดหมู่ที่เลือก */}
+        {/* รายการเมนู */}
         <div style={{
           backgroundColor: '#FFFFFF',
           borderRadius: 24,
@@ -198,12 +214,15 @@ export default function OrderPage() {
         }}>
           {filteredOptions.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px 0', color: '#A06B78' }}>
-              ยังไม่มีรายการในหมวดหมู่นี้เหมียว
+              ยังไม่มีรายการในหมวดหมู่นี้เหมียว 🐱
             </div>
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               {filteredOptions.map((o) => {
                 const isSelected = selectedOptions.some((item) => item.id === o.id);
+                const icon = getCategoryIcon(activeCategory); // ดึงสติ๊กเกอร์ตามหมวดหมู่ที่เลือก
+                const nameWithoutIcon = cleanName(o.name);    // ตัดสติ๊กเกอร์เดิมออกจากชื่อ
+
                 return (
                   <div
                     key={o.id}
@@ -220,7 +239,7 @@ export default function OrderPage() {
                       transition: 'all 0.15s'
                     }}>
                     <span style={{ fontSize: 16, fontWeight: 'bold', color: '#4A2E35' }}>
-                      {getCategoryIcon(activeCategory)} {o.name}
+                      {icon} {nameWithoutIcon}
                     </span>
                     <button
                       type="button"
@@ -243,7 +262,7 @@ export default function OrderPage() {
           )}
         </div>
 
-        {/* แถบแสดงสรุปรายการและปุ่มส่งออเดอร์ (ลอยด้านล่าง) */}
+        {/* แถบสรุปรายการ & ปุ่มยืนยันส่งออเดอร์ */}
         {selectedOptions.length > 0 && (
           <div style={{
             position: 'fixed',
@@ -290,5 +309,17 @@ export default function OrderPage() {
 
       </div>
     </div>
+  );
+}
+
+export default function OrderPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF0F5', color: '#FF5C8A' }}>
+        กำลังโหลด...
+      </div>
+    }>
+      <OrderComponent />
+    </Suspense>
   );
 }
