@@ -1,87 +1,74 @@
 'use client';
 
 import { useState } from 'react';
+import Link from 'next/link';
 import { supabase } from '../lib/supabase';
 
-export default function OpenTablePage() {
-  const [tableNumber, setTableNumber] = useState('1');
-  const [adultCount, setAdultCount] = useState(1);
-  const [studentChildCount, setStudentChildCount] = useState(0);
-  
-  const [isSuccess, setIsSuccess] = useState(false);
-  const [orderUrl, setOrderUrl] = useState('');
-  const [loading, setLoading] = useState(false);
+export default function HomePage() {
+  // สถานะหน้าจอ: 'home' = หน้าแรก, 'form' = กรอกข้อมูลเปิดโต๊ะ, 'success' = โชว์ QR Code
+  const [step, setStep] = useState('home');
 
+  // ข้อมูลฟอร์ม
+  const [tableNumber, setTableNumber] = useState('');
+  const [adults, setAdults] = useState(0);
+  const [childrenCount, setChildrenCount] = useState(0);
+
+  const [loading, setLoading] = useState(false);
+  const [qrUrl, setQrUrl] = useState('');
+  const [copied, setCopied] = useState(false);
+
+  // ฟังก์ชันกดเปิดโต๊ะ
   const handleOpenTable = async (e) => {
     e.preventDefault();
-    setLoading(true);
+    if (!tableNumber) {
+      alert('กรุณากรอกเลขโต๊ะ');
+      return;
+    }
 
+    setLoading(true);
     try {
-      // 1. หาข้อมูลโต๊ะ
-      const { data: tableData, error: tErr } = await supabase
+      // 1. เช็คหรือสร้างโต๊ะในฐานข้อมูล
+      let { data: tableData } = await supabase
         .from('tables')
         .select('*')
         .eq('table_number', tableNumber)
-        .single();
+        .maybeSingle();
 
-      if (tErr || !tableData) {
-        alert('ไม่พบข้อมูลโต๊ะนี้ในระบบ');
-        setLoading(false);
-        return;
+      if (!tableData) {
+        const { data: newTable, error: createError } = await supabase
+          .from('tables')
+          .insert([{ table_number: tableNumber }])
+          .select()
+          .single();
+        if (createError) throw createError;
+        tableData = newTable;
       }
 
-      // 2. ปิด Session เก่าของโต๊ะนี้ (ถ้ามี) แล้วเปิด Session ใหม่
+      // 2. ปิด Session เก่าของโต๊ะนี้ (ถ้ามี)
       await supabase
         .from('sessions')
         .update({ status: 'closed', closed_at: new Date() })
         .eq('table_id', tableData.id)
         .eq('status', 'open');
 
-      const { data: sessionData, error: sErr } = await supabase
+      // 3. สร้าง Session ใหม่สำหรับโต๊ะนี้
+      const totalHeadcount = Number(adults) + Number(childrenCount);
+      const { data: sessionData, error: sessionError } = await supabase
         .from('sessions')
-        .insert([{ table_id: tableData.id, status: 'open' }])
+        .insert([{
+          table_id: tableData.id,
+          headcount: totalHeadcount || 1,
+          status: 'open'
+        }])
         .select()
         .single();
 
-      if (sErr) throw sErr;
+      if (sessionError) throw sessionError;
 
-      // 3. สร้าง Order แรกสำหรับบันทึกจำนวนหัว
-      const { data: orderData } = await supabase
-        .from('orders')
-        .insert([{ session_id: sessionData.id }])
-        .select()
-        .single();
-
-      // ดึงรายการเมนูบุฟเฟ่ต์
-      const { data: menuItems } = await supabase.from('menu_items').select('*');
-      const adultBuffet = menuItems?.find(m => m.is_buffet && !m.is_combo);
-      const studentBuffet = menuItems?.find(m => m.is_buffet && m.is_combo);
-
-      // บันทึกจำนวนคนลง order_items
-      if (adultCount > 0 && adultBuffet) {
-        await supabase.from('order_items').insert([{
-          order_id: orderData.id,
-          menu_item_id: adultBuffet.id,
-          quantity: 1,
-          headcount: parseInt(adultCount),
-          is_free_refill: false
-        }]);
-      }
-
-      if (studentChildCount > 0 && studentBuffet) {
-        await supabase.from('order_items').insert([{
-          order_id: orderData.id,
-          menu_item_id: studentBuffet.id,
-          quantity: 1,
-          headcount: parseInt(studentChildCount),
-          is_free_refill: false
-        }]);
-      }
-
-      // 4. สร้าง URL สั่งอาหารสำหรับ QR Code
-      const generatedUrl = `${window.location.origin}/order?table=${tableNumber}`;
-      setOrderUrl(generatedUrl);
-      setIsSuccess(true);
+      // 4. สร้าง URL สำหรับสั่งอาหารประจำโต๊ะ
+      const orderUrl = `${window.location.origin}/order?table=${tableNumber}`;
+      setQrUrl(orderUrl);
+      setStep('success');
 
     } catch (err) {
       alert('เกิดข้อผิดพลาด: ' + err.message);
@@ -90,109 +77,248 @@ export default function OpenTablePage() {
     }
   };
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(orderUrl);
-    alert('คัดลอกลิงก์เรียบร้อยแล้ว!');
+  // คัดลอกลิงก์
+  const handleCopyLink = () => {
+    navigator.clipboard.writeText(qrUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
   };
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, fontFamily: 'sans-serif' }}>
-      <div style={{ backgroundColor: '#fff', borderRadius: 16, padding: 32, maxWidth: 420, width: '100%', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
-        
-        {!isSuccess ? (
-          <form onSubmit={handleOpenTable}>
-            <h2 style={{ textAlign: 'center', margin: '0 0 24px 0', fontSize: 22, fontWeight: 'bold' }}>
-              🍨 เปิดโต๊ะบุฟเฟต์ไอติม
-            </h2>
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#f9f9fb',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      padding: '20px'
+    }}>
 
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', textAlign: 'center', marginBottom: 8, color: '#333', fontWeight: 'bold' }}>เลขโต๊ะ</label>
-              <select 
-                value={tableNumber} 
-                onChange={e => setTableNumber(e.target.value)}
-                style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, textAlign: 'center' }}>
-                {['1', '2', '3', '4', '5'].map(num => (
-                  <option key={num} value={num}>โต๊ะ {num}</option>
-                ))}
-              </select>
-            </div>
+      {/* ================= STEP 1: หน้าแรกสุด (รูปที่ 1) ================= */}
+      {step === 'home' && (
+        <div style={{ textAlign: 'center', maxWidth: 400, width: '100%' }}>
+          <h1 style={{ fontSize: 32, fontWeight: '800', color: '#111', marginBottom: 12 }}>
+            บุฟเฟต์ขนมไทย
+          </h1>
+          <p style={{ fontSize: 16, color: '#666', marginBottom: 32 }}>
+            ระบบสั่งอาหารและจัดการออเดอร์หน้าร้าน
+          </p>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
+            <button
+              onClick={() => setStep('form')}
+              style={{
+                padding: '12px 24px',
+                borderRadius: 10,
+                border: 'none',
+                backgroundColor: '#111',
+                color: '#fff',
+                fontSize: 15,
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}>
+              สร้าง QR โต๊ะ
+            </button>
+            <Link href="/staff" style={{ textDecoration: 'none' }}>
+              <button style={{
+                padding: '12px 24px',
+                borderRadius: 10,
+                border: '1px solid #111',
+                backgroundColor: '#fff',
+                color: '#111',
+                fontSize: 15,
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}>
+                หน้าครัว
+              </button>
+            </Link>
+          </div>
+        </div>
+      )}
 
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: 'block', textAlign: 'center', marginBottom: 8, color: '#333' }}>
-                ราคาผู้ใหญ่รวมรีฟิล (คน) — 209 บาท/คน
+      {/* ================= STEP 2: หน้าฟอร์มเปิดโต๊ะ (รูปที่ 2) ================= */}
+      {step === 'form' && (
+        <div style={{
+          backgroundColor: '#fff',
+          borderRadius: 20,
+          padding: '36px 28px',
+          maxWidth: 420,
+          width: '100%',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+          boxSizing: 'border-box'
+        }}>
+          <h2 style={{ fontSize: 24, fontWeight: '800', textAlign: 'center', color: '#111', marginBottom: 24 }}>
+            เปิดโต๊ะบุฟเฟต์ขนมไทย
+          </h2>
+
+          <form onSubmit={handleOpenTable} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div>
+              <label style={{ display: 'block', textAlign: 'center', fontWeight: 'bold', fontSize: 15, marginBottom: 8 }}>
+                เลขโต๊ะ
               </label>
-              <input 
-                type="number" 
-                min="0" 
-                value={adultCount} 
-                onChange={e => setAdultCount(e.target.value)}
-                style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, textAlign: 'center', boxSizing: 'border-box' }}
+              <input
+                type="text"
+                placeholder="เช่น 1"
+                value={tableNumber}
+                onChange={(e) => setTableNumber(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: 10,
+                  border: '1px solid #e0e0e0',
+                  fontSize: 16,
+                  boxSizing: 'border-box',
+                  outline: 'none'
+                }}
               />
             </div>
 
-            <div style={{ marginBottom: 24 }}>
-              <label style={{ display: 'block', textAlign: 'center', marginBottom: 8, color: '#333' }}>
-                ราคาเด็ก/นักศึกษารวมรีฟิล (คน) — 159 บาท/คน
+            <div>
+              <label style={{ display: 'block', textAlign: 'center', fontWeight: 'bold', fontSize: 14, marginBottom: 8 }}>
+                จำนวนผู้ใหญ่ รวมรีฟิลน้ำ (คน) — 209 บาท/คน
               </label>
-              <input 
-                type="number" 
-                min="0" 
-                value={studentChildCount} 
-                onChange={e => setStudentChildCount(e.target.value)}
-                style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, textAlign: 'center', boxSizing: 'border-box' }}
+              <input
+                type="number"
+                min="0"
+                value={adults}
+                onChange={(e) => setAdults(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: 10,
+                  border: '1px solid #e0e0e0',
+                  fontSize: 16,
+                  boxSizing: 'border-box',
+                  outline: 'none'
+                }}
               />
             </div>
 
-            <button 
-              type="submit" 
+            <div>
+              <label style={{ display: 'block', textAlign: 'center', fontWeight: 'bold', fontSize: 14, marginBottom: 8 }}>
+                จำนวนเด็ก/นักศึกษา (คน) — 109 บาท/คน
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={childrenCount}
+                onChange={(e) => setChildrenCount(e.target.value)}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  borderRadius: 10,
+                  border: '1px solid #e0e0e0',
+                  fontSize: 16,
+                  boxSizing: 'border-box',
+                  outline: 'none'
+                }}
+              />
+            </div>
+
+            <button
+              type="submit"
               disabled={loading}
-              style={{ width: '100%', padding: '14px', borderRadius: 8, border: 'none', backgroundColor: '#111', color: '#fff', fontSize: 16, fontWeight: 'bold', cursor: 'pointer' }}>
+              style={{
+                marginTop: 10,
+                width: '100%',
+                padding: '14px',
+                borderRadius: 10,
+                border: 'none',
+                backgroundColor: '#111',
+                color: '#fff',
+                fontSize: 16,
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}>
               {loading ? 'กำลังเปิดโต๊ะ...' : 'เปิดโต๊ะ'}
             </button>
           </form>
-        ) : (
-          /* หน้าแสดง QR Code เมื่อเปิดโต๊ะสำเร็จ */
-          <div style={{ textAlign: 'center' }}>
-            <h2 style={{ color: '#2e7d32', margin: '0 0 12px 0', fontSize: 20 }}>
-              ✅ เปิดโต๊ะสำเร็จ
-            </h2>
-            <p style={{ margin: '0 0 20px 0', fontWeight: 'bold', color: '#333' }}>
-              โต๊ะ {tableNumber} | ผู้ใหญ่ {adultCount} ท่าน | เด็ก/นักศึกษา {studentChildCount} ท่าน
-            </p>
+        </div>
+      )}
 
-            {/* ภาพ QR Code สแกนตรงไปหน้าสั่งอาหาร */}
-            <div style={{ padding: 16, background: '#fff', display: 'inline-block', borderRadius: 12, border: '1px solid #eee', marginBottom: 20 }}>
-              <img 
-                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(orderUrl)}`} 
-                alt="QR Code สั่งอาหาร" 
-                style={{ width: 200, height: 200 }}
-              />
-            </div>
+      {/* ================= STEP 3: หน้าแสดง QR Code (รูปที่ 3) ================= */}
+      {step === 'success' && (
+        <div style={{
+          backgroundColor: '#fff',
+          borderRadius: 20,
+          padding: '36px 28px',
+          maxWidth: 420,
+          width: '100%',
+          boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+          boxSizing: 'border-box',
+          textAlign: 'center'
+        }}>
+          <h2 style={{ fontSize: 22, fontWeight: '800', color: '#111', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <span>✅</span> เปิดโต๊ะสำเร็จ
+          </h2>
 
-            <div style={{ marginBottom: 16 }}>
-              <input 
-                type="text" 
-                readOnly 
-                value={orderUrl}
-                style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #eee', backgroundColor: '#f9f9f9', fontSize: 13, textAlign: 'center', color: '#666', boxSizing: 'border-box' }}
-              />
-            </div>
+          <p style={{ fontSize: 15, fontWeight: 'bold', color: '#111', marginBottom: 20 }}>
+            โต๊ะ {tableNumber} | ผู้ใหญ่ {adults} ท่าน | เด็ก/นักศึกษา {childrenCount} ท่าน
+          </p>
 
-            <button 
-              onClick={copyToClipboard}
-              style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid #111', backgroundColor: '#fff', color: '#111', fontWeight: 'bold', fontSize: 15, cursor: 'pointer', marginBottom: 10 }}>
-              คัดลอกลิงก์
+          {/* QR Code Generator API */}
+          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+            <img
+              src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrUrl)}`}
+              alt="QR Code"
+              style={{ width: 220, height: 220, borderRadius: 12 }}
+            />
+          </div>
+
+          <div style={{
+            padding: '12px',
+            backgroundColor: '#f5f5f7',
+            borderRadius: 10,
+            fontSize: 13,
+            color: '#555',
+            wordBreak: 'break-all',
+            marginBottom: 16
+          }}>
+            {qrUrl}
+          </div>
+
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <button
+              onClick={handleCopyLink}
+              style={{
+                width: '100%',
+                padding: '12px',
+                borderRadius: 10,
+                border: '1px solid #111',
+                backgroundColor: '#fff',
+                color: '#111',
+                fontSize: 15,
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}>
+              {copied ? '✅ คัดลอกสำเร็จ!' : 'คัดลอกลิงก์'}
             </button>
 
-            <button 
-              onClick={() => setIsSuccess(false)}
-              style={{ width: '100%', padding: '12px', borderRadius: 8, border: 'none', backgroundColor: '#111', color: '#fff', fontWeight: 'bold', fontSize: 15, cursor: 'pointer' }}>
+            <button
+              onClick={() => {
+                setStep('form');
+                setTableNumber('');
+                setAdults(0);
+                setChildrenCount(0);
+              }}
+              style={{
+                width: '100%',
+                padding: '14px',
+                borderRadius: 10,
+                border: 'none',
+                backgroundColor: '#111',
+                color: '#fff',
+                fontSize: 15,
+                fontWeight: 'bold',
+                cursor: 'pointer'
+              }}>
               เปิดโต๊ะใหม่
             </button>
           </div>
-        )}
+        </div>
+      )}
 
-      </div>
     </div>
   );
 }
