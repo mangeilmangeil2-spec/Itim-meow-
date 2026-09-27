@@ -404,33 +404,35 @@ function OrderComponent() {
 
       </div>
 
-      {/* แถบสรุปรายการ & ยืนยันส่งออเดอร์ (ลอยขึ้นมาจากขอบล่าง 20px เห็นเต็มปุ่มไม่ถูกตัด) */}
+      {/* แถบสรุปรายการ & ยืนยันส่งออเดอร์ (ลอยแยกจากกันชัดเจน) */}
       {selectedOptions.length > 0 && (
         <div style={{
           position: 'fixed',
           bottom: '20px',
-          left: '16px',
-          right: '16px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          width: 'calc(100% - 32px)',
           maxWidth: '568px',
-          margin: '0 auto',
           backgroundColor: '#FFFFFF',
           borderRadius: '20px',
           padding: '12px 18px',
           border: '2px solid #FF7597',
           boxShadow: '0 8px 24px rgba(255, 77, 109, 0.3)',
           display: 'flex',
-          justify: 'space-between',
           alignItems: 'center',
+          justifyContent: 'space-between',
           zIndex: 999,
           boxSizing: 'border-box'
         }}>
-          <div style={{ display: 'flex', flexDirection: 'column' }}>
-            <span style={{ fontSize: 11, color: '#885060' }}>รายการที่เลือก</span>
-            <span style={{ fontSize: 14, fontWeight: '800', color: '#FF4D6D', marginTop: 2 }}>
+          {/* ข้อความสรุปฝั่งซ้าย */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flexShrink: 0 }}>
+            <span style={{ fontSize: '11px', color: '#885060' }}>รายการที่เลือก</span>
+            <span style={{ fontSize: '14px', fontWeight: '800', color: '#FF4D6D' }}>
               {totalItemsCount} ชิ้น ({selectedOptions.length} เมนู)
             </span>
           </div>
 
+          {/* ปุ่มยืนยันส่งออเดอร์ฝั่งขวา (บังคับดันไปขวาสุดด้วย marginLeft: 'auto') */}
           <button
             type="button"
             onClick={handleSubmitOrder}
@@ -442,13 +444,14 @@ function OrderComponent() {
               backgroundColor: submitting ? '#CCCCCC' : '#FF4D6D',
               color: '#FFFFFF',
               fontWeight: 'bold',
-              fontSize: 14,
+              fontSize: '14px',
               cursor: submitting ? 'not-allowed' : 'pointer',
               boxShadow: '0 4px 12px rgba(255, 77, 109, 0.3)',
               display: 'flex',
               alignItems: 'center',
-              gap: 6,
-              flexShrink: 0
+              gap: '6px',
+              flexShrink: 0,
+              marginLeft: 'auto'
             }}>
             {submitting ? 'กำลังส่ง...' : '🚀 ยืนยันส่งออเดอร์'}
           </button>
