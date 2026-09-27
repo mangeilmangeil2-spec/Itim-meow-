@@ -14,12 +14,12 @@ export default function StaffPage() {
     try {
       setErrorMessage('');
 
-      // 1. ดึง sessions ที่ open อยู่
+      // 1. ดึง sessions ที่ open อยู่ (จัดเรียงตาม id)
       const { data: sessionsData, error: sessionErr } = await supabase
         .from('sessions')
         .select('*')
         .eq('status', 'open')
-        .order('created_at', { ascending: true });
+        .order('id', { ascending: true });
 
       if (sessionErr) throw sessionErr;
 
@@ -49,7 +49,7 @@ export default function StaffPage() {
         .from('orders')
         .select('*')
         .in('session_id', sessionIds)
-        .order('created_at', { ascending: true });
+        .order('id', { ascending: true });
 
       if (ordersErr) throw ordersErr;
 
@@ -133,7 +133,7 @@ export default function StaffPage() {
 
     // ฟังเหตุการณ์อัปเดตแบบ Realtime
     const channel = supabase
-      .channel('kitchen_realtime_v2')
+      .channel('kitchen_realtime_v3')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchKitchenData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, fetchKitchenData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, fetchKitchenData)
@@ -152,8 +152,7 @@ export default function StaffPage() {
       const { error } = await supabase
         .from('sessions')
         .update({ 
-          status: 'closed', 
-          closed_at: new Date().toISOString() 
+          status: 'closed'
         })
         .eq('id', sessionId);
 
@@ -319,7 +318,7 @@ export default function StaffPage() {
                           border: '1px solid #FFD6E5'
                         }}>
                           <div style={{ fontSize: 11, fontWeight: 'bold', color: '#FF7597', marginBottom: 6 }}>
-                            ออเดอร์ #{index + 1} — {new Date(order.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
+                            ออเดอร์ #{index + 1}
                           </div>
 
                           {order.items.length === 0 ? (
