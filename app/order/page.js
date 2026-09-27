@@ -2,9 +2,9 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { supabase } from '../../lib/supabase'; // ปรับ Path ให้ตรงกับโครงสร้างโปรเจกต์ของคุณ
+import { supabase } from '../../lib/supabase'; // ปรับ Path ตามโครงสร้างโปรเจกต์ของคุณ
 
-// 1. รายการหมวดหมู่
+// 1. หมวดหมู่เมนู
 const categories = [
   { key: 'flavor', label: '🍦 ไอติม (รส)' },
   { key: 'topping', label: '🍡 ท็อปปิ้ง' },
@@ -12,13 +12,13 @@ const categories = [
   { key: 'drink', label: '🥤 เครื่องดื่ม' },
 ];
 
-// 2. ตัดอีโมจิเดิมที่อาจติดมากับชื่อใน DB ออก
+// 2. ตัดอีโมจิเก่าที่ติดมาจาก DB
 const cleanName = (name) => {
   if (!name) return '';
   return name.replace(/^[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\s]+/gu, '').trim();
 };
 
-// 3. เลือกไอคอนตามหมวดหมู่
+// 3. ฟังก์ชันเลือกไอคอนตามหมวดหมู่
 const getCategoryIcon = (category) => {
   if (!category) return '🍦';
   const cat = String(category).toLowerCase().trim();
@@ -37,11 +37,11 @@ function OrderComponent() {
 
   const [activeCategory, setActiveCategory] = useState('flavor');
   const [buffetOptions, setBuffetOptions] = useState([]);
-  const [selectedOptions, setSelectedOptions] = useState([]); // โครงสร้าง: [{ ...option, quantity: 1 }]
+  const [selectedOptions, setSelectedOptions] = useState([]); // [{ ...option, quantity: 1 }]
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // ดึงข้อมูลเมนูจาก Supabase
+  // ดึงข้อมูลเมนู
   useEffect(() => {
     async function fetchOptions() {
       try {
@@ -63,7 +63,7 @@ function OrderComponent() {
     fetchOptions();
   }, []);
 
-  // กรองเมนูตามหมวดหมู่ที่เลือก
+  // กรองเมนูตามหมวดหมู่
   const filteredOptions = buffetOptions.filter((o) => {
     if (!o.category) return false;
     const itemCat = String(o.category).toLowerCase().trim();
@@ -77,13 +77,13 @@ function OrderComponent() {
     return itemCat === activeCat;
   });
 
-  // เช็คจำนวนชิ้นของรายการที่เลือกอยู่
+  // จำนวนของรายการที่เลือก
   const getSelectedQuantity = (optionId) => {
     const item = selectedOptions.find((opt) => opt.id === optionId);
     return item ? item.quantity : 0;
   };
 
-  // ปรับเพิ่ม (+) หรือ ลด (-) จำนวนรายการ
+  // เพิ่ม / ลด จำนวน
   const updateQuantity = (option, delta) => {
     setSelectedOptions((prev) => {
       const existingIndex = prev.findIndex((item) => item.id === option.id);
@@ -106,10 +106,10 @@ function OrderComponent() {
     });
   };
 
-  // คำนวณจำนวนชิ้นรวมทั้งหมด
+  // รวมจำนวนชิ้นทั้งหมด
   const totalItemsCount = selectedOptions.reduce((sum, item) => sum + item.quantity, 0);
 
-  // ฟังก์ชันส่งออเดอร์
+  // ส่งออเดอร์
   const handleSubmitOrder = async () => {
     if (selectedOptions.length === 0) {
       alert('กรุณาเลือกรายการอาหารก่อนส่งออเดอร์เหมียว! 🐾');
@@ -157,7 +157,7 @@ function OrderComponent() {
     }
   };
 
-  // ฟังก์ชันเรียกเช็คบิล
+  // เรียกเช็คบิล
   const handleRequestBill = async () => {
     if (!confirm('คุณต้องการเรียกเช็คบิลใช่หรือไม่เหมียว? 🧾')) return;
 
@@ -188,14 +188,14 @@ function OrderComponent() {
     <div style={{
       minHeight: '100vh',
       backgroundColor: '#FFF5F7',
-      padding: '16px 16px 120px 16px', // เว้นระยะล่างรองรับแถบสั่งอาหาร
+      padding: '16px 16px 140px 16px', // เว้นระยะล่างเผื่อแถบการ์ดลอย
       fontFamily: '-apple-system, BlinkMacSystemFont, "Kanit", "Mitr", sans-serif',
       color: '#4A2E35',
       boxSizing: 'border-box'
     }}>
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
         
-        {/* ส่วนหัว Header & ปุ่มเช็คบิล */}
+        {/* Header ส่วนหัว + ปุ่มเช็คบิล */}
         <div style={{
           display: 'flex',
           justify: 'space-between',
@@ -206,7 +206,6 @@ function OrderComponent() {
           boxShadow: '0 2px 12px rgba(255, 182, 193, 0.25)',
           border: '1px solid #FFE4EC',
           marginBottom: 16,
-          width: '100%',
           boxSizing: 'border-box'
         }}>
           <div style={{ flex: 1, minWidth: 0, paddingRight: 12 }}>
@@ -275,7 +274,7 @@ function OrderComponent() {
           })}
         </div>
 
-        {/* รายการเมนูอาหาร */}
+        {/* รายการเมนู */}
         <div style={{
           backgroundColor: '#FFFFFF',
           borderRadius: 24,
@@ -309,7 +308,7 @@ function OrderComponent() {
                       boxSizing: 'border-box'
                     }}>
                     
-                    {/* ชื่อรายการ */}
+                    {/* ชื่อเมนู */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, paddingRight: 12 }}>
                       <span style={{ fontSize: 22, flexShrink: 0 }}>{icon}</span>
                       <span style={{ fontSize: 15, fontWeight: '700', color: '#4A2E35' }}>
@@ -317,7 +316,7 @@ function OrderComponent() {
                       </span>
                     </div>
 
-                    {/* ปุ่มเพิ่ม หรือ ปุ่มปรับเพิ่ม/ลด จำนวน */}
+                    {/* ปุ่มเพิ่ม / ปุ่มปรับจำนวน */}
                     {qty === 0 ? (
                       <button
                         type="button"
@@ -405,54 +404,54 @@ function OrderComponent() {
 
       </div>
 
-      {/* แถบสรุปรายการ & ปุ่มส่งออเดอร์ (Fixed ด้านล่างแบบเต็มความกว้าง) */}
+      {/* แถบสรุปรายการ & ยืนยันส่งออเดอร์ (ลอยขึ้นมาจากขอบล่าง 20px เห็นเต็มปุ่มไม่ถูกตัด) */}
       {selectedOptions.length > 0 && (
         <div style={{
           position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
+          bottom: '20px',
+          left: '16px',
+          right: '16px',
+          maxWidth: '568px',
+          margin: '0 auto',
           backgroundColor: '#FFFFFF',
-          borderTop: '2px solid #FF7597',
-          boxShadow: '0 -4px 20px rgba(255, 77, 109, 0.2)',
-          padding: '12px 16px',
+          borderRadius: '20px',
+          padding: '12px 18px',
+          border: '2px solid #FF7597',
+          boxShadow: '0 8px 24px rgba(255, 77, 109, 0.3)',
+          display: 'flex',
+          justify: 'space-between',
+          alignItems: 'center',
           zIndex: 999,
           boxSizing: 'border-box'
         }}>
-          <div style={{
-            maxWidth: 600,
-            margin: '0 auto',
-            display: 'flex',
-            justify: 'space-between',
-            alignItems: 'center'
-          }}>
-            <div>
-              <div style={{ fontSize: 12, color: '#885060' }}>รายการที่เลือก</div>
-              <div style={{ fontSize: 15, fontWeight: '800', color: '#FF4D6D' }}>
-                {totalItemsCount} ชิ้น ({selectedOptions.length} เมนู)
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={handleSubmitOrder}
-              disabled={submitting}
-              style={{
-                padding: '11px 22px',
-                borderRadius: 14,
-                border: 'none',
-                backgroundColor: submitting ? '#CCCCCC' : '#FF4D6D',
-                color: '#FFFFFF',
-                fontWeight: 'bold',
-                fontSize: 14,
-                cursor: submitting ? 'not-allowed' : 'pointer',
-                boxShadow: '0 4px 12px rgba(255, 77, 109, 0.3)',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6
-              }}>
-              {submitting ? 'กำลังส่ง...' : '🚀 ยืนยันส่งออเดอร์'}
-            </button>
+          <div style={{ display: 'flex', flexDirection: 'column' }}>
+            <span style={{ fontSize: 11, color: '#885060' }}>รายการที่เลือก</span>
+            <span style={{ fontSize: 14, fontWeight: '800', color: '#FF4D6D', marginTop: 2 }}>
+              {totalItemsCount} ชิ้น ({selectedOptions.length} เมนู)
+            </span>
           </div>
+
+          <button
+            type="button"
+            onClick={handleSubmitOrder}
+            disabled={submitting}
+            style={{
+              padding: '10px 20px',
+              borderRadius: '14px',
+              border: 'none',
+              backgroundColor: submitting ? '#CCCCCC' : '#FF4D6D',
+              color: '#FFFFFF',
+              fontWeight: 'bold',
+              fontSize: 14,
+              cursor: submitting ? 'not-allowed' : 'pointer',
+              boxShadow: '0 4px 12px rgba(255, 77, 109, 0.3)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              flexShrink: 0
+            }}>
+            {submitting ? 'กำลังส่ง...' : '🚀 ยืนยันส่งออเดอร์'}
+          </button>
         </div>
       )}
 
