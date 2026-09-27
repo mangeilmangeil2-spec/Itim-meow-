@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 
 export default function OpenTablePage() {
   const [tableNumber, setTableNumber] = useState('1');
-  const [buffetOnlyCount, setBuffetOnlyCount] = useState(1);
-  const [buffetComboCount, setBuffetComboCount] = useState(0);
+  const [adultCount, setAdultCount] = useState(1);
+  const [studentChildCount, setStudentChildCount] = useState(0);
   
   const [isSuccess, setIsSuccess] = useState(false);
   const [orderUrl, setOrderUrl] = useState('');
@@ -45,7 +45,7 @@ export default function OpenTablePage() {
 
       if (sErr) throw sErr;
 
-      // 3. สร้าง Order แรกสำหรับบันทึกจำนวนหัวบุฟเฟ่ต์
+      // 3. สร้าง Order แรกสำหรับบันทึกจำนวนหัว
       const { data: orderData } = await supabase
         .from('orders')
         .insert([{ session_id: sessionData.id }])
@@ -54,26 +54,26 @@ export default function OpenTablePage() {
 
       // ดึงรายการเมนูบุฟเฟ่ต์
       const { data: menuItems } = await supabase.from('menu_items').select('*');
-      const buffet139 = menuItems?.find(m => m.is_buffet && !m.is_combo);
-      const buffet168 = menuItems?.find(m => m.is_buffet && m.is_combo);
+      const adultBuffet = menuItems?.find(m => m.is_buffet && !m.is_combo);
+      const studentBuffet = menuItems?.find(m => m.is_buffet && m.is_combo);
 
       // บันทึกจำนวนคนลง order_items
-      if (buffetOnlyCount > 0 && buffet139) {
+      if (adultCount > 0 && adultBuffet) {
         await supabase.from('order_items').insert([{
           order_id: orderData.id,
-          menu_item_id: buffet139.id,
+          menu_item_id: adultBuffet.id,
           quantity: 1,
-          headcount: parseInt(buffetOnlyCount),
+          headcount: parseInt(adultCount),
           is_free_refill: false
         }]);
       }
 
-      if (buffetComboCount > 0 && buffet168) {
+      if (studentChildCount > 0 && studentBuffet) {
         await supabase.from('order_items').insert([{
           order_id: orderData.id,
-          menu_item_id: buffet168.id,
+          menu_item_id: studentBuffet.id,
           quantity: 1,
-          headcount: parseInt(buffetComboCount),
+          headcount: parseInt(studentChildCount),
           is_free_refill: false
         }]);
       }
@@ -119,26 +119,26 @@ export default function OpenTablePage() {
 
             <div style={{ marginBottom: 16 }}>
               <label style={{ display: 'block', textAlign: 'center', marginBottom: 8, color: '#333' }}>
-                จำนวนบุฟเฟ่ต์ไอติม (คน) — 139 บาท/คน
+                ราคาผู้ใหญ่รวมรีฟิล (คน) — 209 บาท/คน
               </label>
               <input 
                 type="number" 
                 min="0" 
-                value={buffetOnlyCount} 
-                onChange={e => setBuffetOnlyCount(e.target.value)}
+                value={adultCount} 
+                onChange={e => setAdultCount(e.target.value)}
                 style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, textAlign: 'center', boxSizing: 'border-box' }}
               />
             </div>
 
             <div style={{ marginBottom: 24 }}>
               <label style={{ display: 'block', textAlign: 'center', marginBottom: 8, color: '#333' }}>
-                จำนวนเซ็ตบุฟเฟ่ต์ + น้ำ 1 แก้ว (คน) — 168 บาท/คน
+                ราคาเด็ก/นักศึกษารวมรีฟิล (คน) — 159 บาท/คน
               </label>
               <input 
                 type="number" 
                 min="0" 
-                value={buffetComboCount} 
-                onChange={e => setBuffetComboCount(e.target.value)}
+                value={studentChildCount} 
+                onChange={e => setStudentChildCount(e.target.value)}
                 style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, textAlign: 'center', boxSizing: 'border-box' }}
               />
             </div>
@@ -157,7 +157,7 @@ export default function OpenTablePage() {
               ✅ เปิดโต๊ะสำเร็จ
             </h2>
             <p style={{ margin: '0 0 20px 0', fontWeight: 'bold', color: '#333' }}>
-              โต๊ะ {tableNumber} | ไอติม {buffetOnlyCount} ท่าน | เซ็ต+น้ำ {buffetComboCount} ท่าน
+              โต๊ะ {tableNumber} | ผู้ใหญ่ {adultCount} ท่าน | เด็ก/นักศึกษา {studentChildCount} ท่าน
             </p>
 
             {/* ภาพ QR Code สแกนตรงไปหน้าสั่งอาหาร */}
