@@ -125,7 +125,7 @@ export default function CustomerOrderPage() {
         await supabase.from('order_item_options').insert(optionRows);
       }
 
-      setMessage('✅ ส่งรายการไอติมไปที่ครัวเรียบร้อยแล้ว!');
+      setMessage('✅ ส่งรายการเรียบร้อยแล้ว!');
       setQuantities({});
     } catch (err) {
       alert('เกิดข้อผิดพลาด: ' + err.message);
@@ -141,7 +141,11 @@ export default function CustomerOrderPage() {
     }
   };
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center' }}>กำลังโหลดเมนู...</div>;
+  if (loading) return (
+    <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'sans-serif', color: '#666' }}>
+      กำลังโหลดเมนู...
+    </div>
+  );
 
   const categories = [
     { key: 'flavor', label: 'ไอติม (รส)' },
@@ -150,136 +154,196 @@ export default function CustomerOrderPage() {
     { key: 'drink', label: 'เครื่องดื่ม' },
   ];
 
+  const filteredOptions = buffetOptions.filter(o => o.category === activeCategory);
+
   return (
-    <div style={{ maxWidth: 600, margin: '0 auto', padding: '16px', fontFamily: 'sans-serif', paddingBottom: 100 }}>
+    <div style={{ minHeight: '100vh', backgroundColor: '#ffffff', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif', color: '#111111' }}>
       
-      {/* Header เลขโต๊ะ + ปุ่มเรียกเก็บเงิน */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-        <div>
-          <span style={{ fontSize: 14, color: '#666' }}>โต๊ะ</span>
-          <h1 style={{ margin: 0, fontSize: 32, fontWeight: 'bold' }}>{tableNumber}</h1>
-        </div>
-        <button 
-          onClick={handleCallBill}
-          style={{ padding: '8px 16px', borderRadius: 20, border: '1px solid #ddd', backgroundColor: '#fff', fontSize: 14, fontWeight: 'bold', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}>
-          💰 เรียกเก็บเงิน
-        </button>
-      </div>
-
-      {message && (
-        <div style={{ padding: 12, backgroundColor: '#e8f5e9', color: '#2e7d32', borderRadius: 8, marginBottom: 16, textAlign: 'center', fontWeight: 'bold' }}>
-          {message}
-        </div>
-      )}
-
-      {/* แถบปุ่มเลือกหมวดหมู่ */}
-      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10, marginBottom: 16 }}>
-        {categories.map(cat => (
+      {/* Container ใหญ่ตรงกลาง */}
+      <div style={{ maxWidth: 680, margin: '0 auto', padding: '20px 20px 120px 20px', boxSizing: 'border-box' }}>
+        
+        {/* Header เลขโต๊ะ + ปุ่มเรียกเก็บเงิน */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24, paddingBottom: 16, borderBottom: '1px solid #f0f0f0' }}>
+          <div>
+            <div style={{ fontSize: 13, color: '#888888', fontWeight: '500' }}>โต๊ะ</div>
+            <div style={{ fontSize: 32, fontWeight: '800', lineHeight: '1.1', color: '#111111' }}>{tableNumber}</div>
+          </div>
           <button 
-            key={cat.key}
-            onClick={() => setActiveCategory(cat.key)}
+            onClick={handleCallBill}
             style={{ 
-              padding: '8px 16px', 
-              borderRadius: 20, 
-              border: 'none', 
-              whiteSpace: 'nowrap',
-              backgroundColor: activeCategory === cat.key ? '#111' : '#f0f0f0', 
-              color: activeCategory === cat.key ? '#fff' : '#333', 
-              fontWeight: 'bold',
-              cursor: 'pointer' 
+              padding: '10px 18px', 
+              borderRadius: 30, 
+              border: '1px solid #e0e0e0', 
+              backgroundColor: '#ffffff', 
+              fontSize: 14, 
+              fontWeight: '600', 
+              cursor: 'pointer', 
+              display: 'flex', 
+              alignItems: 'center', 
+              gap: 6,
+              boxShadow: '0 2px 6px rgba(0,0,0,0.04)'
             }}>
-            {cat.label}
+            💰 เรียกเก็บเงิน
           </button>
-        ))}
-      </div>
+        </div>
 
-      {/* รายการเมนูตามหมวดหมู่ */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {buffetOptions.filter(o => o.category === activeCategory).map(item => {
-          const qty = quantities[item.id] || 0;
-          return (
-            <div 
-              key={item.id}
-              style={{ 
-                display: 'flex', 
-                justify: 'space-between', 
-                alignItems: 'center', 
-                padding: '14px 16px', 
-                borderRadius: 12, 
-                backgroundColor: '#fff', 
-                border: qty > 0 ? '1px solid #111' : '1px solid #eee',
-              }}>
-              <span style={{ fontSize: 16, fontWeight: 'bold' }}>{item.name}</span>
-              
-              {/* ถ้ามีจำนวนมากกว่า 0 ให้แสดงปุ่ม - จำนวน + */}
-              {qty > 0 ? (
-                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                  <button 
-                    onClick={() => updateQuantity(item.id, -1)}
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: '50%',
-                      border: '1px solid #111',
-                      backgroundColor: '#fff',
-                      fontSize: 18,
-                      fontWeight: 'bold',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}>
-                    -
-                  </button>
-                  <span style={{ fontSize: 16, fontWeight: 'bold', minWidth: 16, textAlign: 'center' }}>
-                    {qty}
-                  </span>
-                  <button 
-                    onClick={() => updateQuantity(item.id, 1)}
-                    style={{
-                      width: 32,
-                      height: 32,
-                      borderRadius: '50%',
-                      border: '1px solid #111',
-                      backgroundColor: '#111',
-                      color: '#fff',
-                      fontSize: 18,
-                      fontWeight: 'bold',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center'
-                    }}>
-                    +
-                  </button>
-                </div>
-              ) : (
-                /* ถ้ายังไม่ได้เลือก ให้แสดงปุ่ม + เพิ่ม */
-                <button 
-                  onClick={() => updateQuantity(item.id, 1)}
-                  style={{ 
-                    padding: '8px 16px', 
-                    borderRadius: 8, 
-                    border: 'none', 
-                    backgroundColor: '#111', 
-                    color: '#fff', 
-                    fontWeight: 'bold',
-                    cursor: 'pointer' 
-                  }}>
-                  + เพิ่ม
-                </button>
-              )}
+        {/* ข้อความแจ้งเตือนเมื่อส่งออเดอร์สำเร็จ */}
+        {message && (
+          <div style={{ padding: '14px 18px', backgroundColor: '#e8f5e9', color: '#2e7d32', borderRadius: 12, marginBottom: 20, textAlign: 'center', fontWeight: '600', fontSize: 15 }}>
+            {message}
+          </div>
+        )}
+
+        {/* แถบปุ่มเลือกหมวดหมู่ */}
+        <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 12, marginBottom: 20, scrollbarWidth: 'none' }}>
+          {categories.map(cat => {
+            const isActive = activeCategory === cat.key;
+            return (
+              <button 
+                key={cat.key}
+                onClick={() => setActiveCategory(cat.key)}
+                style={{ 
+                  padding: '10px 22px', 
+                  borderRadius: 25, 
+                  border: 'none', 
+                  whiteSpace: 'nowrap',
+                  backgroundColor: isActive ? '#111111' : '#f2f2f4', 
+                  color: isActive ? '#ffffff' : '#444444', 
+                  fontSize: 14,
+                  fontWeight: '600',
+                  cursor: 'pointer'
+                }}>
+                {cat.label}
+              </button>
+            );
+          })}
+        </div>
+
+        {/* รายการเมนูตามหมวดหมู่ */}
+        <div style={{ display: 'flex', flexDirection: 'column' }}>
+          {filteredOptions.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '40px 0', color: '#888888' }}>
+              ยังไม่มีรายการในหมวดหมู่นี้
             </div>
-          );
-        })}
+          ) : (
+            filteredOptions.map((item, idx) => {
+              const qty = quantities[item.id] || 0;
+              return (
+                <div 
+                  key={item.id}
+                  style={{ 
+                    display: 'flex', 
+                    justify: 'space-between', 
+                    alignItems: 'center', 
+                    width: '100%',
+                    padding: '18px 0', 
+                    borderBottom: idx === filteredOptions.length - 1 ? 'none' : '1px solid #f2f2f4',
+                    boxSizing: 'border-box'
+                  }}>
+                  
+                  {/* ชื่อรายการ */}
+                  <span style={{ fontSize: 16, fontWeight: '700', color: '#111111', flex: 1, paddingRight: 16 }}>
+                    {item.name}
+                  </span>
+                  
+                  {/* ตัวควบคุมจำนวน */}
+                  {qty > 0 ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                      <button 
+                        onClick={() => updateQuantity(item.id, -1)}
+                        style={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: '50%',
+                          border: '1.5px solid #111111',
+                          backgroundColor: '#ffffff',
+                          color: '#111111',
+                          fontSize: 18,
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: 0
+                        }}>
+                        -
+                      </button>
+                      <span style={{ fontSize: 16, fontWeight: '700', minWidth: 20, textAlign: 'center' }}>
+                        {qty}
+                      </span>
+                      <button 
+                        onClick={() => updateQuantity(item.id, 1)}
+                        style={{
+                          width: 34,
+                          height: 34,
+                          borderRadius: '50%',
+                          border: 'none',
+                          backgroundColor: '#111111',
+                          color: '#ffffff',
+                          fontSize: 18,
+                          fontWeight: 'bold',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          padding: 0
+                        }}>
+                        +
+                      </button>
+                    </div>
+                  ) : (
+                    <button 
+                      onClick={() => updateQuantity(item.id, 1)}
+                      style={{ 
+                        padding: '8px 20px', 
+                        borderRadius: 20, 
+                        border: 'none', 
+                        backgroundColor: '#111111', 
+                        color: '#ffffff', 
+                        fontSize: 14,
+                        fontWeight: '700',
+                        cursor: 'pointer'
+                      }}>
+                      + เพิ่ม
+                    </button>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+
       </div>
 
-      {/* ปุ่มแถบตะกร้าลอยอยู่ด้านล่าง */}
+      {/* แถบตะกร้าลอยอยู่ด้านล่างสุด */}
       {totalCount > 0 && (
-        <div style={{ position: 'fixed', bottom: 20, left: 0, right: 0, padding: '0 20px', maxWidth: 600, margin: '0 auto', zIndex: 100 }}>
+        <div style={{ 
+          position: 'fixed', 
+          bottom: 24, 
+          left: '50%', 
+          transform: 'translateX(-50%)', 
+          width: 'calc(100% - 32px)', 
+          maxWidth: 640, 
+          zIndex: 1000 
+        }}>
           <button 
             onClick={handleSendOrder}
-            style={{ width: '100%', padding: '16px', borderRadius: 12, border: 'none', backgroundColor: '#111', color: '#fff', fontSize: 16, fontWeight: 'bold', boxShadow: '0 4px 12px rgba(0,0,0,0.2)', cursor: 'pointer' }}>
+            style={{ 
+              width: '100%', 
+              padding: '16px 24px', 
+              borderRadius: 16, 
+              border: 'none', 
+              backgroundColor: '#111111', 
+              color: '#ffffff', 
+              fontSize: 16, 
+              fontWeight: '700', 
+              boxShadow: '0 8px 24px rgba(0,0,0,0.22)', 
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8
+            }}>
             🧺 ตะกร้า ({totalCount} รายการ) — แตะเพื่อส่งออเดอร์
           </button>
         </div>
