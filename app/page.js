@@ -16,7 +16,8 @@ export default function HomePage() {
   const [origin, setOrigin] = useState('');
   const [copied, setCopied] = useState(false);
 
-  const availableTables = Array.from({ length: 15 }, (_, i) => i + 1);
+  // กำหนดรายการโต๊ะ 1 ถึง 10
+  const availableTables = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -34,13 +35,16 @@ export default function HomePage() {
     setLoading(true);
     try {
       const cleanTableNum = String(tableNumber);
+      const numTableNum = Number(tableNumber);
 
+      // ค้นหาโต๊ะจาก DB (รองรับทั้งประเภท Text และ Integer)
       let { data: tableData } = await supabase
         .from('tables')
         .select('*')
-        .eq('table_number', cleanTableNum)
+        .or(`table_number.eq.${cleanTableNum},table_number.eq.${numTableNum}`)
         .maybeSingle();
 
+      // หากยังไม่มีโต๊ะ ให้พยายามสร้างใหม่
       if (!tableData) {
         const { data: newTable, error: createError } = await supabase
           .from('tables')
@@ -48,10 +52,22 @@ export default function HomePage() {
           .select()
           .single();
 
-        if (createError) throw createError;
-        tableData = newTable;
+        if (createError) {
+          // หากใส่แบบ String ไม่ได้ ลองใส่แบบ Number
+          const { data: newTableNum, error: createError2 } = await supabase
+            .from('tables')
+            .insert([{ table_number: numTableNum }])
+            .select()
+            .single();
+
+          if (createError2) throw createError;
+          tableData = newTableNum;
+        } else {
+          tableData = newTable;
+        }
       }
 
+      // ปิด session เก่าของโต๊ะนี้ก่อน
       await supabase
         .from('sessions')
         .update({ status: 'closed', closed_at: new Date().toISOString() })
@@ -60,6 +76,7 @@ export default function HomePage() {
 
       const totalHeadcount = (parseInt(adults) || 0) + (parseInt(childrenCount) || 0);
 
+      // สร้าง session ใหม่
       let { error: sessionError } = await supabase
         .from('sessions')
         .insert([{
@@ -84,7 +101,7 @@ export default function HomePage() {
 
     } catch (err) {
       console.error('Error:', err);
-      alert('เกิดข้อผิดพลาด: ' + (err.message || 'โปรดลองใหม่อีกครั้ง'));
+      alert('เกิดข้อผิดพลาดในการเปิดโต๊ะ: ' + (err.message || 'โปรดตรวจสอบการรัน SQL สำหรับโต๊ะ 1-10 ใน Supabase'));
     } finally {
       setLoading(false);
     }
@@ -187,7 +204,7 @@ export default function HomePage() {
           <form onSubmit={handleOpenTable} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             <div>
               <label style={{ display: 'block', textAlign: 'center', fontWeight: 'bold', fontSize: 15, color: '#663B47', marginBottom: 8 }}>
-                🏷️ เลือกเลขโต๊ะ
+                🏷️ เลือกเลขโต๊ะ (โต๊ะ 1 - 10)
               </label>
               <select
                 value={tableNumber}
@@ -302,7 +319,7 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* STEP 3: โชว์ QR Code - จัดกึ่งกลางสมบูรณ์ */}
+      {/* STEP 3: โชว์ QR Code */}
       {step === 'success' && (
         <div style={{
           backgroundColor: '#FFFFFF',
