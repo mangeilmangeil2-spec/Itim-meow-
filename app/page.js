@@ -3,179 +3,86 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '../lib/supabase';
 
-export default function Home() {
-  const [tableNumber, setTableNumber] = useState('');
-  const [tableId, setTableId] = useState(null);
-  const [sessionId, setSessionId] = useState(null);
-  const [menuItems, setMenuItems] = useState([]);
-  const [buffetOptions, setBuffetOptions] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState('');
-
-  // Modal / Selection State
-  const [selectedMenu, setSelectedMenu] = useState(null);
-  const [headcount, setHeadcount] = useState(1);
-  const [selectedDrinkId, setSelectedDrinkId] = useState('');
+export default function OpenTablePage() {
+  const [tableNumber, setTableNumber] = useState('1');
+  const [buffetOnlyCount, setBuffetOnlyCount] = useState(1);
+  const [buffetComboCount, setBuffetComboCount] = useState(0);
   
-  // Refill State
-  const [isRefilling, setIsRefilling] = useState(false);
-  const [selectedOptions, setSelectedOptions] = useState([]);
+  const [isSuccess, setIsSuccess] = useState(false);
+  const [orderUrl, setOrderUrl] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    // อ่านเลขโต๊ะจาก URL (?table=1)
-    const params = new URLSearchParams(window.location.search);
-    const table = params.get('table') || '1';
-    setTableNumber(table);
-
-    initData(table);
-  }, []);
-
-  const initData = async (tableNum) => {
+  const handleOpenTable = async (e) => {
+    e.preventDefault();
     setLoading(true);
+
     try {
-      // 1. ดึงข้อมูลโต๊ะ
-      let { data: tableData } = await supabase
+      // 1. หาข้อมูลโต๊ะ
+      const { data: tableData, error: tErr } = await supabase
         .from('tables')
         .select('*')
-        .eq('table_number', tableNum)
+        .eq('table_number', tableNumber)
         .single();
 
-      if (tableData) {
-        setTableId(tableData.id);
-
-        // 2. หา Session ที่เปิดอยู่ หรือสร้างใหม่
-        let { data: sessionData } = await supabase
-          .from('sessions')
-          .select('*')
-          .eq('table_id', tableData.id)
-          .eq('status', 'open')
-          .maybeSingle();
-
-        if (!sessionData) {
-          const { data: newSession } = await supabase
-            .from('sessions')
-            .insert([{ table_id: tableData.id, status: 'open' }])
-            .select()
-            .single();
-          sessionData = newSession;
-        }
-        if (sessionData) setSessionId(sessionData.id);
+      if (tErr || !tableData) {
+        alert('ไม่พบข้อมูลโต๊ะนี้ในระบบ');
+        setLoading(false);
+        return;
       }
 
-      // 3. ดึงเมนูอาหาร
-      const { data: menus } = await supabase
-        .from('menu_items')
-        .select('*')
-        .eq('is_available', true);
-      setMenuItems(menus || []);
+      // 2. ปิด Session เก่าของโต๊ะนี้ (ถ้ามี) แล้วเปิด Session ใหม่
+      await supabase
+        .from('sessions')
+        .update({ status: 'closed', closed_at: new Date() })
+        .eq('table_id', tableData.id)
+        .eq('status', 'open');
 
-      // 4. ดึงตัวเลือกบุฟเฟ่ต์ (รส, ท็อปปิ้ง, ซอส, น้ำ)
-      const { data: options } = await supabase
-        .from('buffet_options')
-        .select('*')
-        .eq('is_available', true)
-        .order('sort_order', { ascending: true });
-      setBuffetOptions(options || []);
+      const { data: sessionData, error: sErr } = await supabase
+        .from('sessions')
+        .insert([{ table_id: tableData.id, status: 'open' }])
+        .select()
+        .single();
 
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
+      if (sErr) throw sErr;
 
-  // สั่งซื้อบุฟเฟ่ต์ / น้ำปกติ
-  const handleOrderMenu = async () => {
-    if (!sessionId || !selectedMenu) return;
-
-    if (selectedMenu.is_combo && !selectedDrinkId) {
-      alert('กรุณาเลือกน้ำดื่ม 1 แก้วสำหรับเซ็ตนี้ครับ');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // 1. สร้าง Order
-      const { data: order } = await supabase
+      // 3. สร้าง Order แรกสำหรับบันทึกจำนวนหัวบุฟเฟ่ต์
+      const { data: orderData } = await supabase
         .from('orders')
-        .insert([{ session_id: sessionId }])
+        .insert([{ session_id: sessionData.id }])
         .select()
         .single();
 
-      // 2. สร้าง Order Item
-      const { data: orderItem } = await supabase
-        .from('order_items')
-        .insert([{
-          order_id: order.id,
-          menu_item_id: selectedMenu.id,
-          quantity: selectedMenu.is_buffet ? 1 : headcount,
-          headcount: selectedMenu.is_buffet ? headcount : null,
-          is_free_refill: false
-        }])
-        .select()
-        .single();
+      // ดึงรายการเมนูบุฟเฟ่ต์
+      const { data: menuItems } = await supabase.from('menu_items').select('*');
+      const buffet139 = menuItems?.find(m => m.is_buffet && !m.is_combo);
+      const buffet168 = menuItems?.find(m => m.is_buffet && m.is_combo);
 
-      // 3. ถ้าเป็นเซ็ตคอมโบ บันทึกน้ำที่เลือก
-      if (selectedMenu.is_combo && selectedDrinkId) {
-        await supabase
-          .from('order_item_options')
-          .insert([{
-            order_item_id: orderItem.id,
-            buffet_option_id: selectedDrinkId
-          }]);
-      }
-
-      setMessage('✅ ส่งออเดอร์เรียบร้อยแล้วครับ!');
-      setSelectedMenu(null);
-      setHeadcount(1);
-      setSelectedDrinkId('');
-    } catch (err) {
-      alert('เกิดข้อผิดพลาดในการสั่งซื้อ: ' + err.message);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // สั่งตักเพิ่ม (Free Refill)
-  const handleRefill = async () => {
-    if (!sessionId || selectedOptions.length === 0) {
-      alert('กรุณาเลือกอย่างน้อย 1 รายการครับ');
-      return;
-    }
-
-    setLoading(true);
-    try {
-      // หาเมนูบุฟเฟ่ต์ไอติมเพื่อผูกไอดี
-      const buffetMenu = menuItems.find(m => m.is_buffet);
-
-      const { data: order } = await supabase
-        .from('orders')
-        .insert([{ session_id: sessionId }])
-        .select()
-        .single();
-
-      const { data: orderItem } = await supabase
-        .from('order_items')
-        .insert([{
-          order_id: order.id,
-          menu_item_id: buffetMenu ? buffetMenu.id : menuItems[0]?.id,
+      // บันทึกจำนวนคนลง order_items
+      if (buffetOnlyCount > 0 && buffet139) {
+        await supabase.from('order_items').insert([{
+          order_id: orderData.id,
+          menu_item_id: buffet139.id,
           quantity: 1,
-          is_free_refill: true
-        }])
-        .select()
-        .single();
+          headcount: parseInt(buffetOnlyCount),
+          is_free_refill: false
+        }]);
+      }
 
-      // บันทึกตัวเลือกที่ติ๊กเลือกทั้งหมด
-      const optionRows = selectedOptions.map(optId => ({
-        order_item_id: orderItem.id,
-        buffet_option_id: optId
-      }));
+      if (buffetComboCount > 0 && buffet168) {
+        await supabase.from('order_items').insert([{
+          order_id: orderData.id,
+          menu_item_id: buffet168.id,
+          quantity: 1,
+          headcount: parseInt(buffetComboCount),
+          is_free_refill: false
+        }]);
+      }
 
-      await supabase.from('order_item_options').insert(optionRows);
+      // 4. สร้าง URL สั่งอาหารสำหรับ QR Code
+      const generatedUrl = `${window.location.origin}/order?table=${tableNumber}`;
+      setOrderUrl(generatedUrl);
+      setIsSuccess(true);
 
-      setMessage('🍨 ส่งรายการตักเพิ่มไปที่ครัวเรียบร้อย!');
-      setIsRefilling(false);
-      setSelectedOptions([]);
     } catch (err) {
       alert('เกิดข้อผิดพลาด: ' + err.message);
     } finally {
@@ -183,145 +90,109 @@ export default function Home() {
     }
   };
 
-  const toggleOption = (id) => {
-    if (selectedOptions.includes(id)) {
-      setSelectedOptions(selectedOptions.filter(o => o !== id));
-    } else {
-      setSelectedOptions([...selectedOptions, id]);
-    }
+  const copyToClipboard = () => {
+    navigator.clipboard.writeText(orderUrl);
+    alert('คัดลอกลิงก์เรียบร้อยแล้ว!');
   };
 
-  if (loading) return <div style={{ padding: 40, textAlign: 'center' }}>กำลังโหลดข้อมูล...</div>;
-
   return (
-    <div style={{ maxWidth: 600, margin: '0 auto', padding: 20, fontFamily: 'sans-serif' }}>
-      {/* Header */}
-      <div style={{ backgroundColor: '#fff0f5', padding: 20, borderRadius: 12, textAlign: 'center', marginBottom: 20 }}>
-        <h1 style={{ margin: 0, color: '#d32f2f' }}>🍨 ร้าน Itim</h1>
-        <p style={{ margin: '5px 0 0 0', fontWeight: 'bold' }}>โต๊ะหมายเลข: {tableNumber}</p>
-      </div>
+    <div style={{ minHeight: '100vh', backgroundColor: '#f5f5f5', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20, fontFamily: 'sans-serif' }}>
+      <div style={{ backgroundColor: '#fff', borderRadius: 16, padding: 32, maxWidth: 420, width: '100%', boxShadow: '0 4px 20px rgba(0,0,0,0.08)' }}>
+        
+        {!isSuccess ? (
+          <form onSubmit={handleOpenTable}>
+            <h2 style={{ textAlign: 'center', margin: '0 0 24px 0', fontSize: 22, fontWeight: 'bold' }}>
+              🍨 เปิดโต๊ะบุฟเฟต์ไอติม
+            </h2>
 
-      {message && (
-        <div style={{ padding: 12, backgroundColor: '#e8f5e9', color: '#2e7d32', borderRadius: 8, marginBottom: 20, textAlign: 'center' }}>
-          {message}
-        </div>
-      )}
-
-      {/* ปุ่มสลับโหมดสั่งเมนูหลัก / ตักเพิ่ม */}
-      <div style={{ display: 'flex', gap: 10, marginBottom: 20 }}>
-        <button 
-          onClick={() => setIsRefilling(false)}
-          style={{ flex: 1, padding: 12, borderRadius: 8, border: 'none', background: !isRefilling ? '#d32f2f' : '#eee', color: !isRefilling ? '#fff' : '#333', fontWeight: 'bold', cursor: 'pointer' }}>
-          🛒 เลือกเมนู
-        </button>
-        <button 
-          onClick={() => setIsRefilling(true)}
-          style={{ flex: 1, padding: 12, borderRadius: 8, border: 'none', background: isRefilling ? '#d32f2f' : '#eee', color: isRefilling ? '#fff' : '#333', fontWeight: 'bold', cursor: 'pointer' }}>
-          🍨 ตักเพิ่ม (Refill)
-        </button>
-      </div>
-
-      {/* หน้าเลือกเมนูหลัก */}
-      {!isRefilling ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 15 }}>
-          {menuItems.map(item => (
-            <div key={item.id} style={{ border: '1px solid #ddd', borderRadius: 12, padding: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <h3 style={{ margin: '0 0 5px 0' }}>{item.name}</h3>
-                <p style={{ margin: 0, color: '#666' }}>{item.price} บาท {item.is_buffet ? '/ ท่าน' : '/ แก้ว'}</p>
-              </div>
-              <button 
-                onClick={() => { setSelectedMenu(item); setMessage(''); }}
-                style={{ padding: '8px 16px', borderRadius: 8, border: 'none', backgroundColor: '#1976d2', color: '#fff', cursor: 'pointer' }}>
-                เลือก
-              </button>
-            </div>
-          ))}
-        </div>
-      ) : (
-        /* หน้าเลือกตักเพิ่ม */
-        <div>
-          <h3>เลือกรายการไอติม & ท็อปปิ้ง (ฟรี):</h3>
-          {['flavor', 'topping', 'sauce'].map(cat => (
-            <div key={cat} style={{ marginBottom: 20 }}>
-              <h4 style={{ textTransform: 'capitalize', color: '#d32f2f', borderBottom: '1px solid #ddd', paddingBottom: 5 }}>
-                {cat === 'flavor' ? 'ไอติม (รส)' : cat === 'topping' ? 'ท็อปปิ้ง' : 'ซอส'}
-              </h4>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                {buffetOptions.filter(o => o.category === cat).map(opt => (
-                  <label key={opt.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 8, background: '#f9f9f9', borderRadius: 6, cursor: 'pointer' }}>
-                    <input 
-                      type="checkbox" 
-                      checked={selectedOptions.includes(opt.id)}
-                      onChange={() => toggleOption(opt.id)}
-                    />
-                    <span>{opt.name}</span>
-                  </label>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', textAlign: 'center', marginBottom: 8, color: '#333', fontWeight: 'bold' }}>เลขโต๊ะ</label>
+              <select 
+                value={tableNumber} 
+                onChange={e => setTableNumber(e.target.value)}
+                style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, textAlign: 'center' }}>
+                {['1', '2', '3', '4', '5'].map(num => (
+                  <option key={num} value={num}>โต๊ะ {num}</option>
                 ))}
-              </div>
+              </select>
             </div>
-          ))}
 
-          <button 
-            onClick={handleRefill}
-            style={{ width: '100%', padding: 15, borderRadius: 8, border: 'none', backgroundColor: '#388e3c', color: '#fff', fontSize: 16, fontWeight: 'bold', cursor: 'pointer', marginTop: 10 }}>
-            ส่งรายการตักเพิ่มไปที่ครัว
-          </button>
-        </div>
-      )}
-
-      {/* Modal ป๊อปอัพยืนยันเมนู */}
-      {selectedMenu && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
-          <div style={{ backgroundColor: '#fff', padding: 24, borderRadius: 16, maxWidth: 400, width: '100%' }}>
-            <h3>{selectedMenu.name}</h3>
-            <p>ราคา: {selectedMenu.price} บาท</p>
-
-            {/* ถ้าเป็นบุฟเฟ่ต์ ให้กรอกจำนวนคน */}
-            {selectedMenu.is_buffet && (
-              <div style={{ marginBottom: 15 }}>
-                <label style={{ display: 'block', marginBottom: 5, fontWeight: 'bold' }}>จำนวนผู้ใช้บริการ (คน):</label>
-                <input 
-                  type="number" 
-                  min="1" 
-                  value={headcount} 
-                  onChange={e => setHeadcount(Math.max(1, parseInt(e.target.value) || 1))}
-                  style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #ccc', fontSize: 16 }}
-                />
-              </div>
-            )}
-
-            {/* ถ้าเป็นเซ็ตคอมโบ ให้เลือกน้ำ 1 อย่าง */}
-            {selectedMenu.is_combo && (
-              <div style={{ marginBottom: 15 }}>
-                <label style={{ display: 'block', marginBottom: 5, fontWeight: 'bold' }}>เลือกน้ำดื่มฟรี 1 แก้ว:</label>
-                <select 
-                  value={selectedDrinkId} 
-                  onChange={e => setSelectedDrinkId(e.target.value)}
-                  style={{ width: '100%', padding: 10, borderRadius: 8, border: '1px solid #ccc', fontSize: 16 }}>
-                  <option value="">-- เลือกน้ำดื่ม --</option>
-                  {buffetOptions.filter(o => o.category === 'drink').map(drink => (
-                    <option key={drink.id} value={drink.id}>{drink.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-
-            <div style={{ display: 'flex', gap: 10, marginTop: 20 }}>
-              <button 
-                onClick={() => setSelectedMenu(null)}
-                style={{ flex: 1, padding: 12, borderRadius: 8, border: 'none', backgroundColor: '#ccc', cursor: 'pointer' }}>
-                ยกเลิก
-              </button>
-              <button 
-                onClick={handleOrderMenu}
-                style={{ flex: 1, padding: 12, borderRadius: 8, border: 'none', backgroundColor: '#d32f2f', color: '#fff', fontWeight: 'bold', cursor: 'pointer' }}>
-                ยืนยันสั่งซื้อ
-              </button>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', textAlign: 'center', marginBottom: 8, color: '#333' }}>
+                จำนวนบุฟเฟ่ต์ไอติม (คน) — 139 บาท/คน
+              </label>
+              <input 
+                type="number" 
+                min="0" 
+                value={buffetOnlyCount} 
+                onChange={e => setBuffetOnlyCount(e.target.value)}
+                style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, textAlign: 'center', boxSizing: 'border-box' }}
+              />
             </div>
+
+            <div style={{ marginBottom: 24 }}>
+              <label style={{ display: 'block', textAlign: 'center', marginBottom: 8, color: '#333' }}>
+                จำนวนเซ็ตบุฟเฟ่ต์ + น้ำ 1 แก้ว (คน) — 168 บาท/คน
+              </label>
+              <input 
+                type="number" 
+                min="0" 
+                value={buffetComboCount} 
+                onChange={e => setBuffetComboCount(e.target.value)}
+                style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid #ddd', fontSize: 16, textAlign: 'center', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            <button 
+              type="submit" 
+              disabled={loading}
+              style={{ width: '100%', padding: '14px', borderRadius: 8, border: 'none', backgroundColor: '#111', color: '#fff', fontSize: 16, fontWeight: 'bold', cursor: 'pointer' }}>
+              {loading ? 'กำลังเปิดโต๊ะ...' : 'เปิดโต๊ะ'}
+            </button>
+          </form>
+        ) : (
+          /* หน้าแสดง QR Code เมื่อเปิดโต๊ะสำเร็จ */
+          <div style={{ textAlign: 'center' }}>
+            <h2 style={{ color: '#2e7d32', margin: '0 0 12px 0', fontSize: 20 }}>
+              ✅ เปิดโต๊ะสำเร็จ
+            </h2>
+            <p style={{ margin: '0 0 20px 0', fontWeight: 'bold', color: '#333' }}>
+              โต๊ะ {tableNumber} | ไอติม {buffetOnlyCount} ท่าน | เซ็ต+น้ำ {buffetComboCount} ท่าน
+            </p>
+
+            {/* ภาพ QR Code สแกนตรงไปหน้าสั่งอาหาร */}
+            <div style={{ padding: 16, background: '#fff', display: 'inline-block', borderRadius: 12, border: '1px solid #eee', marginBottom: 20 }}>
+              <img 
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(orderUrl)}`} 
+                alt="QR Code สั่งอาหาร" 
+                style={{ width: 200, height: 200 }}
+              />
+            </div>
+
+            <div style={{ marginBottom: 16 }}>
+              <input 
+                type="text" 
+                readOnly 
+                value={orderUrl}
+                style={{ width: '100%', padding: '10px', borderRadius: 8, border: '1px solid #eee', backgroundColor: '#f9f9f9', fontSize: 13, textAlign: 'center', color: '#666', boxSizing: 'border-box' }}
+              />
+            </div>
+
+            <button 
+              onClick={copyToClipboard}
+              style={{ width: '100%', padding: '12px', borderRadius: 8, border: '1px solid #111', backgroundColor: '#fff', color: '#111', fontWeight: 'bold', fontSize: 15, cursor: 'pointer', marginBottom: 10 }}>
+              คัดลอกลิงก์
+            </button>
+
+            <button 
+              onClick={() => setIsSuccess(false)}
+              style={{ width: '100%', padding: '12px', borderRadius: 8, border: 'none', backgroundColor: '#111', color: '#fff', fontWeight: 'bold', fontSize: 15, cursor: 'pointer' }}>
+              เปิดโต๊ะใหม่
+            </button>
           </div>
-        </div>
-      )}
+        )}
+
+      </div>
     </div>
   );
 }
