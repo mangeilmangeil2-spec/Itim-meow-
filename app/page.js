@@ -16,7 +16,6 @@ export default function HomePage() {
   const [origin, setOrigin] = useState('');
   const [copied, setCopied] = useState(false);
 
-  // รายการโต๊ะในระบบ (1-15)
   const availableTables = Array.from({ length: 15 }, (_, i) => i + 1);
 
   useEffect(() => {
@@ -110,20 +109,22 @@ export default function HomePage() {
       alignItems: 'center',
       justifyContent: 'center',
       padding: '20px',
-      color: '#4A2E35'
+      color: '#4A2E35',
+      boxSizing: 'border-box'
     }}>
 
       {/* STEP 1: หน้าแรก */}
       {step === 'home' && (
         <div style={{
           textAlign: 'center',
-          maxWidth: 420,
+          maxWidth: 440,
           width: '100%',
           backgroundColor: 'rgba(255, 255, 255, 0.95)',
           padding: '40px 28px',
           borderRadius: 28,
           boxShadow: '0 10px 30px rgba(255, 182, 193, 0.4)',
-          border: '3px solid #FFC6D9'
+          border: '3px solid #FFC6D9',
+          boxSizing: 'border-box'
         }}>
           <div style={{ fontSize: 64, marginBottom: 8 }}>🐱🍦</div>
           <h1 style={{ fontSize: 36, fontWeight: '800', color: '#FF5C8A', marginBottom: 8, letterSpacing: '-0.5px' }}>
@@ -132,7 +133,7 @@ export default function HomePage() {
           <p style={{ fontSize: 15, color: '#885060', marginBottom: 28, fontWeight: '500' }}>
             ระบบสั่งไอติมหวานเจี๊ยบ & จัดการออเดอร์สุดน่ารัก 💖
           </p>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 14 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
             <button
               onClick={() => setStep('form')}
               style={{
@@ -172,7 +173,7 @@ export default function HomePage() {
           backgroundColor: '#FFFFFF',
           borderRadius: 28,
           padding: '36px 28px',
-          maxWidth: 420,
+          maxWidth: 440,
           width: '100%',
           boxShadow: '0 10px 30px rgba(255, 182, 193, 0.4)',
           border: '3px solid #FFC6D9',
@@ -184,8 +185,6 @@ export default function HomePage() {
           </h2>
 
           <form onSubmit={handleOpenTable} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-            
-            {/* ดร็อปดาวน์เลือกเลขโต๊ะ */}
             <div>
               <label style={{ display: 'block', textAlign: 'center', fontWeight: 'bold', fontSize: 15, color: '#663B47', marginBottom: 8 }}>
                 🏷️ เลือกเลขโต๊ะ
@@ -204,10 +203,8 @@ export default function HomePage() {
                   fontWeight: 'bold',
                   boxSizing: 'border-box',
                   outline: 'none',
-                  textAlign: 'center',
                   color: tableNumber ? '#FF5C8A' : '#A06B78',
                   cursor: 'pointer',
-                  WebkitAppearance: 'none',
                   textAlignLast: 'center'
                 }}
               >
@@ -305,21 +302,24 @@ export default function HomePage() {
         </div>
       )}
 
-      {/* STEP 3: โชว์ QR Code */}
+      {/* STEP 3: โชว์ QR Code - จัดกึ่งกลางสมบูรณ์ */}
       {step === 'success' && (
         <div style={{
           backgroundColor: '#FFFFFF',
           borderRadius: 28,
           padding: '36px 28px',
-          maxWidth: 420,
+          maxWidth: 440,
           width: '100%',
           boxShadow: '0 10px 30px rgba(255, 182, 193, 0.4)',
           border: '3px solid #FFC6D9',
           boxSizing: 'border-box',
-          textAlign: 'center'
+          textAlign: 'center',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center'
         }}>
-          <div style={{ fontSize: 40, marginBottom: 4 }}>😻🎉</div>
-          <h2 style={{ fontSize: 22, fontWeight: '800', color: '#FF5C8A', marginBottom: 8 }}>
+          <div style={{ fontSize: 44, marginBottom: 4 }}>😻🎉</div>
+          <h2 style={{ fontSize: 22, fontWeight: '800', color: '#FF5C8A', marginBottom: 8, lineHeight: '1.3' }}>
             เปิดโต๊ะ Itim-meow สำเร็จแล้วเหมียว!
           </h2>
 
@@ -328,41 +328,46 @@ export default function HomePage() {
           </p>
 
           <div style={{
+            width: '100%',
             display: 'flex',
             justify: 'center',
+            alignItems: 'center',
             marginBottom: 20,
-            padding: 16,
+            padding: '24px 16px',
             backgroundColor: '#FFF0F3',
             borderRadius: 20,
-            border: '2px dashed #FFB3C6'
+            border: '2px dashed #FFB3C6',
+            boxSizing: 'border-box'
           }}>
             <img
               src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrUrl)}`}
               alt="QR Code"
-              style={{ width: 200, height: 200, borderRadius: 12 }}
+              style={{ width: 220, height: 220, borderRadius: 12, display: 'block', margin: '0 auto' }}
             />
           </div>
 
           <div style={{
-            padding: '12px',
+            width: '100%',
+            padding: '12px 14px',
             backgroundColor: '#FFF9FA',
             borderRadius: 14,
             border: '1px solid #FFC6D9',
             fontSize: 13,
             color: '#885060',
             wordBreak: 'break-all',
-            marginBottom: 16
+            marginBottom: 16,
+            boxSizing: 'border-box'
           }}>
             {qrUrl}
           </div>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
             <button
               onClick={handleCopyLink}
               style={{
                 width: '100%',
-                padding: '12px',
-                borderRadius: 16,
+                padding: '14px',
+                borderRadius: 18,
                 border: '2px solid #FF9EAA',
                 backgroundColor: '#FFF0F3',
                 color: '#FF5C8A',
@@ -383,7 +388,7 @@ export default function HomePage() {
               style={{
                 width: '100%',
                 padding: '14px',
-                borderRadius: 16,
+                borderRadius: 18,
                 border: 'none',
                 backgroundColor: '#FF7597',
                 color: '#fff',
