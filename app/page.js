@@ -123,8 +123,8 @@ export default function HomePage() {
           border: '3px solid #FFC6D9'
         }}>
           <div style={{ fontSize: 64, marginBottom: 8 }}>🐱🍦</div>
-          <h1 style={{ fontSize: 32, fontWeight: '800', color: '#FF5C8A', marginBottom: 8 }}>
-            บุฟเฟต์ไอติมคุณแมว 🐾
+          <h1 style={{ fontSize: 36, fontWeight: '800', color: '#FF5C8A', marginBottom: 8, letterSpacing: '-0.5px' }}>
+            Itim-meow 🐾
           </h1>
           <p style={{ fontSize: 15, color: '#885060', marginBottom: 28, fontWeight: '500' }}>
             ระบบสั่งไอติมหวานเจี๊ยบ & จัดการออเดอร์สุดน่ารัก 💖
@@ -177,7 +177,7 @@ export default function HomePage() {
         }}>
           <div style={{ textAlign: 'center', fontSize: 48, marginBottom: 6 }}>🐾</div>
           <h2 style={{ fontSize: 24, fontWeight: '800', textAlign: 'center', color: '#FF5C8A', marginBottom: 24 }}>
-            เปิดโต๊ะบุฟเฟต์ไอติมแมว
+            เปิดโต๊ะ Itim-meow
           </h2>
 
           <form onSubmit={handleOpenTable} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -307,7 +307,7 @@ export default function HomePage() {
         }}>
           <div style={{ fontSize: 40, marginBottom: 4 }}>😻🎉</div>
           <h2 style={{ fontSize: 22, fontWeight: '800', color: '#FF5C8A', marginBottom: 8 }}>
-            เปิดโต๊ะสำเร็จแล้วเหมียว!
+            เปิดโต๊ะ Itim-meow สำเร็จแล้วเหมียว!
           </h2>
 
           <p style={{ fontSize: 14, fontWeight: 'bold', color: '#663B47', marginBottom: 20 }}>
