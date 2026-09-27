@@ -4,13 +4,6 @@ import { useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { supabase } from '../../lib/supabase'; // ปรับ path ตามโครงสร้างโฟลเดอร์ของคุณ
 
-// 1. กำหนดหมวดหมู่รายการ
-const categories = [
-  { key: 'flavor', label: '🍦 ไอติม (รส)' },
-  { key: 'topping', label: '🍡 ท็อปปิ้ง' },
-  { key: 'sauce', label: '🍯 ซอส' },
-  { key: 'drink', label: '🥤 เครื่องดื่ม' },
-];
 
 // 1. ฟังก์ชันตัดสติ๊กเกอร์เดิมที่อาจติดมาในชื่อเมนูออกก่อน
 const cleanName = (name) => {
