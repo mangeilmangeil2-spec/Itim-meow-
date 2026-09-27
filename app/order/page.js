@@ -12,13 +12,23 @@ const categories = [
   { key: 'drink', label: '🥤 เครื่องดื่ม' },
 ];
 
-// 2. ฟังก์ชันเลือกสติ๊กเกอร์ตามหมวดหมู่ (รองรับทั้ง key อังกฤษ และ คำไทย)
+// 1. ฟังก์ชันตัดสติ๊กเกอร์เดิมที่อาจติดมาในชื่อเมนูออกก่อน
+const cleanName = (name) => {
+  if (!name) return '';
+  // ลบไอคอนอีโมจิที่อยู่หน้าข้อความออกทั้งหมด
+  return name.replace(/^[\u{1F300}-\u{1F9FF}\u{2600}-\u{26FF}\u{2700}-\u{27BF}\s]+/gu, '').trim();
+};
+
+// 2. ฟังก์ชันเลือกสติ๊กเกอร์ตามหมวดหมู่ (เช็กครอบคลุมทุกแบบ)
 const getCategoryIcon = (category) => {
   if (!category) return '🍦';
-  if (category === 'flavor' || category.includes('ไอติม')) return '🍦';
-  if (category === 'topping' || category.includes('ท็อปปิ้ง')) return '🍡';
-  if (category === 'sauce' || category.includes('ซอส')) return '🍯';
-  if (category === 'drink' || category.includes('เครื่องดื่ม')) return '🥤';
+  const cat = String(category).toLowerCase().trim();
+
+  if (cat.includes('flavor') || cat.includes('ไอติม') || cat.includes('รส')) return '🍦';
+  if (cat.includes('topping') || cat.includes('ท็อปปิ้ง')) return '🍡';
+  if (cat.includes('sauce') || cat.includes('ซอส')) return '🍯';
+  if (cat.includes('drink') || cat.includes('เครื่องดื่ม') || cat.includes('น้ำ')) return '🥤';
+
   return '🍦';
 };
 
