@@ -37,7 +37,7 @@ function OrderComponent() {
 
   const [activeCategory, setActiveCategory] = useState('flavor');
   const [buffetOptions, setBuffetOptions] = useState([]);
-  const [selectedOptions, setSelectedOptions] = useState([]);
+  const [selectedOptions, setSelectedOptions] = useState([]); // [{ ...option, quantity: 1 }]
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
@@ -77,17 +77,37 @@ function OrderComponent() {
     return itemCat === activeCat;
   });
 
-  // เลือก / ยกเลิกรายการ
-  const toggleSelectOption = (option) => {
+  // ดึงจำนวนของรายการที่เลือกอยู่
+  const getSelectedQuantity = (optionId) => {
+    const item = selectedOptions.find((opt) => opt.id === optionId);
+    return item ? item.quantity : 0;
+  };
+
+  // ปรับเพิ่ม / ลด จำนวนรายการ
+  const updateQuantity = (option, delta) => {
     setSelectedOptions((prev) => {
-      const exists = prev.find((item) => item.id === option.id);
-      if (exists) {
-        return prev.filter((item) => item.id !== option.id);
+      const existingIndex = prev.findIndex((item) => item.id === option.id);
+      if (existingIndex > -1) {
+        const currentQty = prev[existingIndex].quantity;
+        const newQty = currentQty + delta;
+        if (newQty <= 0) {
+          return prev.filter((item) => item.id !== option.id);
+        } else {
+          const updated = [...prev];
+          updated[existingIndex] = { ...updated[existingIndex], quantity: newQty };
+          return updated;
+        }
       } else {
-        return [...prev, option];
+        if (delta > 0) {
+          return [...prev, { ...option, quantity: 1 }];
+        }
+        return prev;
       }
     });
   };
+
+  // คำนวณจำนวนชิ้นรวมทั้งหมด
+  const totalItemsCount = selectedOptions.reduce((sum, item) => sum + item.quantity, 0);
 
   // ฟังก์ชันส่งออเดอร์เข้าครัว
   const handleSubmitOrder = async () => {
@@ -118,6 +138,7 @@ function OrderComponent() {
       const optionInserts = selectedOptions.map((opt) => ({
         order_item_id: itemData.id,
         option_id: opt.id,
+        quantity: opt.quantity,
       }));
 
       const { error: optErr } = await supabase
@@ -167,29 +188,29 @@ function OrderComponent() {
     <div style={{
       minHeight: '100vh',
       backgroundColor: '#FFF5F7',
-      padding: '20px 16px',
+      padding: '20px 16px 120px 16px',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Kanit", "Mitr", sans-serif',
       color: '#4A2E35'
     }}>
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
         
-        {/* Header + ปุ่มเช็คบิล */}
+        {/* Header สวยงาม จัดวางชื่อเมนูและปุ่มเช็คบิลอย่างเป็นระเบียบ */}
         <div style={{
           display: 'flex',
           justify: 'space-between',
           alignItems: 'center',
-          marginBottom: 20,
           backgroundColor: '#FFFFFF',
-          padding: '12px 18px',
-          borderRadius: 20,
-          boxShadow: '0 2px 10px rgba(255, 182, 193, 0.2)',
-          border: '1px solid #FFE4EC'
+          padding: '16px 20px',
+          borderRadius: 22,
+          boxShadow: '0 4px 16px rgba(255, 182, 193, 0.25)',
+          border: '1.5px solid #FFE4EC',
+          marginBottom: 18
         }}>
           <div>
-            <h1 style={{ fontSize: 20, fontWeight: '800', color: '#FF5C8A', margin: 0 }}>
+            <h1 style={{ fontSize: 20, fontWeight: '800', color: '#FF5C8A', margin: 0, lineHeight: '1.2' }}>
               🍨 เลือกเมนูไอศกรีม
             </h1>
-            <p style={{ fontSize: 12, color: '#885060', margin: '2px 0 0 0' }}>
+            <p style={{ fontSize: 12, color: '#885060', margin: '4px 0 0 0' }}>
               สั่งได้ไม่อั้นตามใจชอบเหมียว 🐾
             </p>
           </div>
@@ -198,19 +219,19 @@ function OrderComponent() {
             type="button"
             onClick={handleRequestBill}
             style={{
-              padding: '8px 14px',
-              borderRadius: 14,
-              border: '2px solid #FF7597',
-              backgroundColor: '#FFF0F3',
-              color: '#FF4D6D',
+              padding: '9px 16px',
+              borderRadius: 16,
+              border: 'none',
+              backgroundColor: '#FF5C8A',
+              color: '#FFFFFF',
               fontWeight: 'bold',
               fontSize: 13,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
-              gap: 4,
-              boxShadow: '0 2px 8px rgba(255, 117, 151, 0.15)',
-              whiteSpace: 'nowrap'
+              gap: 6,
+              boxShadow: '0 3px 10px rgba(255, 92, 138, 0.3)',
+              flexShrink: 0
             }}>
             🧾 เช็คบิล
           </button>
@@ -250,14 +271,13 @@ function OrderComponent() {
           })}
         </div>
 
-        {/* กล่องแสดงรายการเมนู (จัดระยะเรียงซ้าย-ขวาใหม่) */}
+        {/* รายการเมนูพร้อมปุ่มปรับจำนวน (+ / -) */}
         <div style={{
           backgroundColor: '#FFFFFF',
           borderRadius: 24,
           border: '2px solid #FFC6D9',
           padding: 16,
-          boxShadow: '0 4px 16px rgba(255, 182, 193, 0.2)',
-          marginBottom: 100
+          boxShadow: '0 4px 16px rgba(255, 182, 193, 0.2)'
         }}>
           {filteredOptions.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px 0', color: '#A06B78' }}>
@@ -266,53 +286,111 @@ function OrderComponent() {
           ) : (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {filteredOptions.map((o) => {
-                const isSelected = selectedOptions.some((item) => item.id === o.id);
                 const icon = getCategoryIcon(activeCategory);
                 const nameWithoutIcon = cleanName(o.name);
+                const qty = getSelectedQuantity(o.id);
 
                 return (
                   <div
                     key={o.id}
-                    onClick={() => toggleSelectOption(o)}
                     style={{
                       display: 'flex',
                       justify: 'space-between',
                       alignItems: 'center',
-                      padding: '14px 18px',
-                      borderRadius: 16,
-                      backgroundColor: isSelected ? '#FFF0F3' : '#FFF9FA',
-                      border: isSelected ? '2px solid #FF7597' : '1px solid #FFE4EC',
-                      cursor: 'pointer',
-                      transition: 'all 0.15s',
-                      width: '100%',
-                      boxSizing: 'border-box'
+                      padding: '12px 16px',
+                      borderRadius: 18,
+                      backgroundColor: qty > 0 ? '#FFF0F3' : '#FFF9FA',
+                      border: qty > 0 ? '2px solid #FF7597' : '1px solid #FFE4EC',
+                      boxShadow: '0 2px 8px rgba(255, 182, 193, 0.1)',
+                      transition: 'all 0.15s ease'
                     }}>
                     
-                    {/* ชื่อเมนู + ไอคอนอยู่ซ้ายมือ */}
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, paddingRight: 12 }}>
-                      <span style={{ fontSize: 20, flexShrink: 0 }}>{icon}</span>
-                      <span style={{ fontSize: 16, fontWeight: 'bold', color: '#4A2E35', wordBreak: 'break-word' }}>
+                    {/* ไอคอน + ชื่อรายการ */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, paddingRight: 12 }}>
+                      <span style={{ fontSize: 22, flexShrink: 0 }}>{icon}</span>
+                      <span style={{ fontSize: 16, fontWeight: '700', color: '#4A2E35' }}>
                         {nameWithoutIcon}
                       </span>
                     </div>
 
-                    {/* ปุ่มเลือกขยับไปขวาสุด */}
-                    <button
-                      type="button"
-                      style={{
-                        padding: '8px 18px',
+                    {/* ปุ่มปรับเพิ่ม/ลด จำนวน */}
+                    {qty === 0 ? (
+                      <button
+                        type="button"
+                        onClick={() => updateQuantity(o, 1)}
+                        style={{
+                          padding: '8px 18px',
+                          borderRadius: 14,
+                          border: 'none',
+                          backgroundColor: '#FF7597',
+                          color: '#FFFFFF',
+                          fontWeight: 'bold',
+                          fontSize: 14,
+                          cursor: 'pointer',
+                          boxShadow: '0 2px 8px rgba(255, 117, 151, 0.25)',
+                          transition: 'all 0.15s'
+                        }}>
+                        + เพิ่ม
+                      </button>
+                    ) : (
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        backgroundColor: '#FF7597',
                         borderRadius: 14,
-                        border: 'none',
-                        backgroundColor: isSelected ? '#FF4D6D' : '#FF7597',
-                        color: '#FFFFFF',
-                        fontWeight: 'bold',
-                        fontSize: 14,
-                        cursor: 'pointer',
-                        flexShrink: 0,
-                        boxShadow: isSelected ? '0 2px 8px rgba(255, 77, 109, 0.3)' : 'none'
+                        padding: '3px',
+                        boxShadow: '0 2px 8px rgba(255, 117, 151, 0.3)'
                       }}>
-                      {isSelected ? '✓ เลือกแล้ว' : '+ เพิ่ม'}
-                    </button>
+                        <button
+                          type="button"
+                          onClick={() => updateQuantity(o, -1)}
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 10,
+                            border: 'none',
+                            backgroundColor: '#FFFFFF',
+                            color: '#FF4D6D',
+                            fontWeight: '800',
+                            fontSize: 18,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}>
+                          -
+                        </button>
+                        <span style={{
+                          padding: '0 12px',
+                          color: '#FFFFFF',
+                          fontWeight: 'bold',
+                          fontSize: 15,
+                          minWidth: 20,
+                          textAlign: 'center'
+                        }}>
+                          {qty}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => updateQuantity(o, 1)}
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: 10,
+                            border: 'none',
+                            backgroundColor: '#FFFFFF',
+                            color: '#FF4D6D',
+                            fontWeight: '800',
+                            fontSize: 18,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center'
+                          }}>
+                          +
+                        </button>
+                      </div>
+                    )}
                   </div>
                 );
               })}
@@ -320,7 +398,7 @@ function OrderComponent() {
           )}
         </div>
 
-        {/* แถบสรุปรายการ & ปุ่มส่งออเดอร์ */}
+        {/* แถบสรุปรายการ & ปุ่มส่งออเดอร์ด้านล่าง */}
         {selectedOptions.length > 0 && (
           <div style={{
             position: 'fixed',
@@ -342,7 +420,7 @@ function OrderComponent() {
             <div>
               <div style={{ fontSize: 12, color: '#885060' }}>รายการที่เลือก</div>
               <div style={{ fontSize: 16, fontWeight: '800', color: '#FF4D6D' }}>
-                {selectedOptions.length} รายการ
+                {totalItemsCount} ชิ้น ({selectedOptions.length} เมนู)
               </div>
             </div>
             <button
