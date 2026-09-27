@@ -7,23 +7,17 @@ import { supabase } from '../../lib/supabase';
 export default function StaffPage() {
   const [activeSessions, setActiveSessions] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
 
-  // ดึงข้อมูลโต๊ะที่กำลังเปิดใช้งาน และออเดอร์ทั้งหมด
+  // ดึงข้อมูลโต๊ะและออเดอร์ทั้งหมด
   const fetchKitchenData = async () => {
     try {
-      // 1. ดึง sessions ที่ open อยู่ พร้อมข้อมูลโต๊ะ
+      setErrorMessage('');
+
+      // 1. ดึง sessions ที่ open อยู่
       const { data: sessionsData, error: sessionErr } = await supabase
         .from('sessions')
-        .select(`
-          id,
-          headcount,
-          created_at,
-          status,
-          tables (
-            id,
-            table_number
-          )
-        `)
+        .select('*')
         .eq('status', 'open')
         .order('created_at', { ascending: true });
 
@@ -35,36 +29,92 @@ export default function StaffPage() {
         return;
       }
 
-      const sessionIds = sessionsData.map(s => s.id);
+      // 2. ดึงข้อมูล tables
+      const tableIds = sessionsData.map(s => s.table_id).filter(Boolean);
+      let tablesMap = {};
+      if (tableIds.length > 0) {
+        const { data: tablesData } = await supabase
+          .from('tables')
+          .select('*')
+          .in('id', tableIds);
+        
+        (tablesData || []).forEach(t => {
+          tablesMap[t.id] = t.table_number;
+        });
+      }
 
-      // 2. ดึง orders ของ sessions เหล่านั้น
+      // 3. ดึง orders ของ sessions เหล่านี้
+      const sessionIds = sessionsData.map(s => s.id);
       const { data: ordersData, error: ordersErr } = await supabase
         .from('orders')
-        .select(`
-          id,
-          session_id,
-          created_at,
-          order_items (
-            id,
-            quantity,
-            is_free_refill,
-            menu_items ( name ),
-            order_item_options (
-              id,
-              buffet_options ( name, category )
-            )
-          )
-        `)
+        .select('*')
         .in('session_id', sessionIds)
         .order('created_at', { ascending: true });
 
       if (ordersErr) throw ordersErr;
 
-      // 3. จัดกลุ่มออเดอร์ลงแต่ละ Session/โต๊ะ
+      // 4. ดึง order_items
+      const orderIds = (ordersData || []).map(o => o.id);
+      let itemsMap = {};
+      
+      if (orderIds.length > 0) {
+        const { data: itemsData } = await supabase
+          .from('order_items')
+          .select('*')
+          .in('order_id', orderIds);
+
+        // ดึง order_item_options (ถ้ามี)
+        const itemIds = (itemsData || []).map(i => i.id);
+        let optionsMap = {};
+
+        if (itemIds.length > 0) {
+          const { data: optionsData } = await supabase
+            .from('order_item_options')
+            .select('*')
+            .in('order_item_id', itemIds);
+
+          // ดึงชื่อท็อปปิ้ง/รสชาติจาก buffet_options
+          const optionIds = (optionsData || []).map(opt => opt.option_id).filter(Boolean);
+          let buffetNameMap = {};
+          if (optionIds.length > 0) {
+            const { data: buffetData } = await supabase
+              .from('buffet_options')
+              .select('*')
+              .in('id', optionIds);
+            
+            (buffetData || []).forEach(b => {
+              buffetNameMap[b.id] = b.name;
+            });
+          }
+
+          (optionsData || []).forEach(opt => {
+            if (!optionsMap[opt.order_item_id]) optionsMap[opt.order_item_id] = [];
+            optionsMap[opt.order_item_id].push(buffetNameMap[opt.option_id] || 'รายการบุฟเฟต์');
+          });
+        }
+
+        // รวม items กับ options
+        (itemsData || []).forEach(item => {
+          if (!itemsMap[item.order_id]) itemsMap[item.order_id] = [];
+          itemsMap[item.order_id].push({
+            ...item,
+            options: optionsMap[item.id] || []
+          });
+        });
+      }
+
+      // 5. รวมข้อมูลทั้งหมดเข้าด้วยกัน
       const formattedSessions = sessionsData.map(session => {
-        const sessionOrders = (ordersData || []).filter(o => o.session_id === session.id);
+        const sessionOrders = (ordersData || [])
+          .filter(o => o.session_id === session.id)
+          .map(order => ({
+            ...order,
+            items: itemsMap[order.id] || []
+          }));
+
         return {
           ...session,
+          table_number: tablesMap[session.table_id] || 'ไม่ระบุ',
           orders: sessionOrders
         };
       });
@@ -72,6 +122,7 @@ export default function StaffPage() {
       setActiveSessions(formattedSessions);
     } catch (err) {
       console.error('Fetch kitchen data error:', err);
+      setErrorMessage(err.message || 'เกิดข้อผิดพลาดในการดึงข้อมูล');
     } finally {
       setLoading(false);
     }
@@ -80,18 +131,12 @@ export default function StaffPage() {
   useEffect(() => {
     fetchKitchenData();
 
-    // ฟังเหตุการณ์อัปเดตเรียลไทม์
+    // ฟังเหตุการณ์อัปเดตแบบ Realtime
     const channel = supabase
-      .channel('kitchen_realtime')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, () => {
-        fetchKitchenData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, () => {
-        fetchKitchenData();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, () => {
-        fetchKitchenData();
-      })
+      .channel('kitchen_realtime_v2')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchKitchenData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, fetchKitchenData)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, fetchKitchenData)
       .subscribe();
 
     return () => {
@@ -99,7 +144,7 @@ export default function StaffPage() {
     };
   }, []);
 
-  // ฟังก์ชันเคลียร์โต๊ะ / เช็คบิลเก็บเงิน
+  // ฟังก์ชันเช็คบิล / ปิดโต๊ะ
   const handleCloseSession = async (sessionId, tableNum) => {
     if (!confirm(`ยืนยันการเช็คบิล/เคลียร์ โต๊ะ ${tableNum} ใช่ไหมเหมียว? 🐾`)) return;
 
@@ -115,7 +160,7 @@ export default function StaffPage() {
       if (error) throw error;
 
       alert(`เช็คบิล โต๊ะ ${tableNum} เรียบร้อยแล้วครับ! 🎉`);
-      fetchKitchenData(); // รีโหลดหน้าทันที
+      fetchKitchenData();
     } catch (err) {
       alert('เกิดข้อผิดพลาดในการเช็คบิล: ' + err.message);
     }
@@ -138,12 +183,12 @@ export default function StaffPage() {
     }}>
       <div style={{ maxWidth: 1000, margin: '0 auto' }}>
         
-        {/* Header หน้าครัว */}
+        {/* Header */}
         <div style={{
           display: 'flex',
           justify: 'space-between',
           alignItems: 'center',
-          marginBottom: 24,
+          marginBottom: 20,
           backgroundColor: '#FFFFFF',
           padding: '16px 24px',
           borderRadius: 24,
@@ -155,24 +200,46 @@ export default function StaffPage() {
               👨‍🍳 หน้าครัว Itim-meow (Live Orders)
             </h1>
             <p style={{ fontSize: 13, color: '#885060', margin: '4px 0 0 0' }}>
-              อัปเดตรายการสั่งซื้อและจัดการเช็คบิลแบบเรียลไทม์ 🐾
+              รายการออเดอร์และเช็คบิลแบบเรียลไทม์ 🐾
             </p>
           </div>
-          <Link href="/" style={{ textDecoration: 'none' }}>
-            <button style={{
-              padding: '10px 18px',
-              borderRadius: 16,
-              border: '2px solid #FF9EAA',
-              backgroundColor: '#FFF0F3',
-              color: '#FF5C8A',
-              fontWeight: 'bold',
-              fontSize: 14,
-              cursor: 'pointer'
-            }}>
-              🏠 หน้าเปิดโต๊ะ
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              onClick={fetchKitchenData}
+              style={{
+                padding: '10px 16px',
+                borderRadius: 16,
+                border: 'none',
+                backgroundColor: '#FF7597',
+                color: '#FFF',
+                fontWeight: 'bold',
+                fontSize: 14,
+                cursor: 'pointer'
+              }}>
+              🔄 รีเฟรช
             </button>
-          </Link>
+            <Link href="/" style={{ textDecoration: 'none' }}>
+              <button style={{
+                padding: '10px 16px',
+                borderRadius: 16,
+                border: '2px solid #FF9EAA',
+                backgroundColor: '#FFF0F3',
+                color: '#FF5C8A',
+                fontWeight: 'bold',
+                fontSize: 14,
+                cursor: 'pointer'
+              }}>
+                🏠 หน้าเปิดโต๊ะ
+              </button>
+            </Link>
+          </div>
         </div>
+
+        {errorMessage && (
+          <div style={{ padding: 14, backgroundColor: '#FFEBE9', color: '#D32F2F', borderRadius: 16, marginBottom: 20, fontWeight: 'bold', fontSize: 14 }}>
+            ⚠️ {errorMessage}
+          </div>
+        )}
 
         {/* รายการโต๊ะที่เปิดอยู่ */}
         {activeSessions.length === 0 ? (
@@ -193,119 +260,117 @@ export default function StaffPage() {
         ) : (
           <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))',
             gap: 20
           }}>
-            {activeSessions.map((session) => {
-              const tableNum = session.tables?.table_number || 'N/A';
-              
-              return (
-                <div key={session.id} style={{
-                  backgroundColor: '#FFFFFF',
-                  borderRadius: 24,
-                  border: '3px solid #FFC6D9',
-                  boxShadow: '0 6px 20px rgba(255, 182, 193, 0.3)',
-                  padding: 20,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  justify: 'space-between'
-                }}>
-                  <div>
-                    {/* หัวการ์ดโต๊ะ */}
-                    <div style={{
-                      display: 'flex',
-                      justify: 'space-between',
-                      alignItems: 'center',
-                      paddingBottom: 12,
-                      borderBottom: '2px dashed #FFE4EC',
-                      marginBottom: 14
-                    }}>
-                      <div>
-                        <span style={{ fontSize: 22, fontWeight: '800', color: '#FF5C8A' }}>
-                          โต๊ะ {tableNum}
-                        </span>
-                        <span style={{ fontSize: 12, color: '#885060', marginLeft: 8 }}>
-                          ({session.headcount || 1} ท่าน)
-                        </span>
-                      </div>
-                      <span style={{
-                        fontSize: 11,
-                        padding: '4px 10px',
-                        backgroundColor: '#E8F5E9',
-                        color: '#2E7D32',
-                        borderRadius: 12,
-                        fontWeight: 'bold'
-                      }}>
-                        ● กำลังรับทาน
+            {activeSessions.map((session) => (
+              <div key={session.id} style={{
+                backgroundColor: '#FFFFFF',
+                borderRadius: 24,
+                border: '3px solid #FFC6D9',
+                boxShadow: '0 6px 20px rgba(255, 182, 193, 0.3)',
+                padding: 20,
+                display: 'flex',
+                flexDirection: 'column',
+                justify: 'space-between'
+              }}>
+                <div>
+                  {/* หัวการ์ดโต๊ะ */}
+                  <div style={{
+                    display: 'flex',
+                    justify: 'space-between',
+                    alignItems: 'center',
+                    paddingBottom: 12,
+                    borderBottom: '2px dashed #FFE4EC',
+                    marginBottom: 14
+                  }}>
+                    <div>
+                      <span style={{ fontSize: 22, fontWeight: '800', color: '#FF5C8A' }}>
+                        โต๊ะ {session.table_number}
+                      </span>
+                      <span style={{ fontSize: 12, color: '#885060', marginLeft: 8 }}>
+                        ({session.headcount || 1} ท่าน)
                       </span>
                     </div>
+                    <span style={{
+                      fontSize: 11,
+                      padding: '4px 10px',
+                      backgroundColor: '#E8F5E9',
+                      color: '#2E7D32',
+                      borderRadius: 12,
+                      fontWeight: 'bold'
+                    }}>
+                      ● กำลังรับทาน
+                    </span>
+                  </div>
 
-                    {/* รายการออเดอร์ของโต๊ะนี้ */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
-                      {session.orders.length === 0 ? (
-                        <div style={{ fontSize: 13, color: '#A06B78', fontStyle: 'italic', textAlign: 'center', padding: '12px 0' }}>
-                          ยังไม่ได้ส่งรายการอาหาร 🍦
-                        </div>
-                      ) : (
-                        session.orders.map((order, index) => (
-                          <div key={order.id} style={{
-                            backgroundColor: '#FFF9FA',
-                            borderRadius: 16,
-                            padding: 12,
-                            border: '1px solid #FFD6E5'
-                          }}>
-                            <div style={{ fontSize: 11, fontWeight: 'bold', color: '#FF7597', marginBottom: 6 }}>
-                              ออเดอร์ที่ #{index + 1} — {new Date(order.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
-                            </div>
+                  {/* รายการออเดอร์ */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
+                    {session.orders.length === 0 ? (
+                      <div style={{ fontSize: 13, color: '#A06B78', fontStyle: 'italic', textAlign: 'center', padding: '12px 0' }}>
+                        ยังไม่มีออเดอร์ใหม่เข้ามา 🍦
+                      </div>
+                    ) : (
+                      session.orders.map((order, index) => (
+                        <div key={order.id} style={{
+                          backgroundColor: '#FFF9FA',
+                          borderRadius: 16,
+                          padding: 12,
+                          border: '1px solid #FFD6E5'
+                        }}>
+                          <div style={{ fontSize: 11, fontWeight: 'bold', color: '#FF7597', marginBottom: 6 }}>
+                            ออเดอร์ #{index + 1} — {new Date(order.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' })} น.
+                          </div>
 
-                            {order.order_items.map((item) => (
-                              <div key={item.id}>
-                                {item.order_item_options && item.order_item_options.length > 0 ? (
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-                                    {item.order_item_options.map((opt) => (
-                                      <div key={opt.id} style={{ fontSize: 14, fontWeight: 'bold', color: '#4A2E35', display: 'flex', justifyContent: 'space-between' }}>
-                                        <span>🍦 {opt.buffet_options?.name}</span>
-                                        <span style={{ color: '#FF5C8A' }}>x1</span>
-                                      </div>
-                                    ))}
-                                  </div>
+                          {order.items.length === 0 ? (
+                            <div style={{ fontSize: 13, color: '#4A2E35' }}>🍦 สั่งชุดไอศกรีมบุฟเฟต์</div>
+                          ) : (
+                            order.items.map((item, i) => (
+                              <div key={item.id || i} style={{ marginBottom: 4 }}>
+                                {item.options && item.options.length > 0 ? (
+                                  item.options.map((optName, optIdx) => (
+                                    <div key={optIdx} style={{ fontSize: 14, fontWeight: 'bold', color: '#4A2E35', display: 'flex', justifyContent: 'space-between' }}>
+                                      <span>🍨 {optName}</span>
+                                      <span style={{ color: '#FF5C8A' }}>x1</span>
+                                    </div>
+                                  ))
                                 ) : (
                                   <div style={{ fontSize: 14, fontWeight: 'bold', color: '#4A2E35' }}>
-                                    🍧 {item.menu_items?.name || 'บุฟเฟต์ไอศกรีม'} x {item.quantity}
+                                    🍦 รายการไอศกรีม x {item.quantity || 1}
                                   </div>
                                 )}
                               </div>
-                            ))}
-                          </div>
-                        ))
-                      )}
-                    </div>
+                            ))
+                          )}
+                        </div>
+                      ))
+                    )}
                   </div>
-
-                  {/* ปุ่มเช็คบิล / ปิดโต๊ะ */}
-                  <button
-                    onClick={() => handleCloseSession(session.id, tableNum)}
-                    style={{
-                      width: '100%',
-                      padding: '12px',
-                      borderRadius: 16,
-                      border: 'none',
-                      backgroundColor: '#FF4D6D',
-                      color: '#FFFFFF',
-                      fontSize: 15,
-                      fontWeight: 'bold',
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 12px rgba(255, 77, 109, 0.3)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 6
-                    }}>
-                    💰 เช็คบิล & ปิดโต๊ะ {tableNum}
-                  </button>
                 </div>
-              );
-            })}
+
+                {/* ปุ่มเช็คบิล */}
+                <button
+                  onClick={() => handleCloseSession(session.id, session.table_number)}
+                  style={{
+                    width: '100%',
+                    padding: '12px',
+                    borderRadius: 16,
+                    border: 'none',
+                    backgroundColor: '#FF4D6D',
+                    color: '#FFFFFF',
+                    fontSize: 15,
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    boxShadow: '0 4px 12px rgba(255, 77, 109, 0.3)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: 6
+                  }}>
+                  💰 เช็คบิล & ปิดโต๊ะ {session.table_number}
+                </button>
+              </div>
+            ))}
           </div>
         )}
 
