@@ -27,7 +27,7 @@ export default function CustomerOrderPage() {
         .from('tables')
         .select('*')
         .eq('table_number', tableNum)
-        .single();
+        .maybeSingle();
 
       if (tableData) {
         const { data: sessionData } = await supabase
@@ -154,25 +154,28 @@ export default function CustomerOrderPage() {
   return (
     <div style={{ minHeight: '100vh', backgroundColor: '#FFF5F7', fontFamily: '-apple-system, BlinkMacSystemFont, "Kanit", "Mitr", sans-serif', color: '#4A2E35' }}>
       
-      <div style={{ maxWidth: 680, margin: '0 auto', padding: '20px 20px 120px 20px', boxSizing: 'border-box' }}>
+      {/* จำกัดความกว้างแอปให้อยู่ตรงกลางหน้าจอ ไม่ยืดออกข้างกว้างเกินไป */}
+      <div style={{ maxWidth: 500, margin: '0 auto', padding: '16px 16px 120px 16px', boxSizing: 'border-box' }}>
         
-        {/* Header โต๊ะ + ชื่อร้าน Itim-meow */}
+        {/* Header โต๊ะ + ปุ่มเช็คบิล */}
         <div style={{
           display: 'flex',
           justify: 'space-between',
           alignItems: 'center',
-          marginBottom: 20,
-          padding: '16px 20px',
+          marginBottom: 16,
+          padding: '14px 18px',
           backgroundColor: '#FFFFFF',
           borderRadius: 24,
           boxShadow: '0 4px 16px rgba(255, 182, 193, 0.3)',
-          border: '2px solid #FFC6D9'
+          border: '2px solid #FFC6D9',
+          width: '100%',
+          boxSizing: 'border-box'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <span style={{ fontSize: 36 }}>🐱</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 32 }}>🐱</span>
             <div>
-              <div style={{ fontSize: 13, color: '#FF5C8A', fontWeight: '800' }}>Itim-meow 🍦</div>
-              <div style={{ fontSize: 24, fontWeight: '800', color: '#4A2E35', lineHeight: '1.1' }}>
+              <div style={{ fontSize: 12, color: '#FF5C8A', fontWeight: '800' }}>Itim-meow 🍦</div>
+              <div style={{ fontSize: 22, fontWeight: '800', color: '#4A2E35', lineHeight: '1.1' }}>
                 โต๊ะ {tableNumber}
               </div>
             </div>
@@ -181,31 +184,32 @@ export default function CustomerOrderPage() {
           <button 
             onClick={handleCallBill}
             style={{ 
-              padding: '10px 18px', 
-              borderRadius: 20, 
+              padding: '10px 16px', 
+              borderRadius: 18, 
               border: '2px solid #FFB3C6', 
               backgroundColor: '#FFF0F3', 
               color: '#FF4D6D',
-              fontSize: 14, 
+              fontSize: 13, 
               fontWeight: 'bold', 
               cursor: 'pointer', 
               display: 'flex', 
               alignItems: 'center', 
-              gap: 6
+              gap: 6,
+              flexShrink: 0
             }}>
             💰 เรียกเช็คบิล
           </button>
         </div>
 
-        {/* ข้อความแจ้งเตือน */}
+        {/* แจ้งเตือนส่งออเดอร์ */}
         {message && (
-          <div style={{ padding: '14px 18px', backgroundColor: '#E8F5E9', color: '#2E7D32', borderRadius: 16, marginBottom: 20, textAlign: 'center', fontWeight: 'bold', border: '1.5px solid #C8E6C9' }}>
+          <div style={{ padding: '12px 16px', backgroundColor: '#E8F5E9', color: '#2E7D32', borderRadius: 16, marginBottom: 16, textAlign: 'center', fontWeight: 'bold', border: '1.5px solid #C8E6C9' }}>
             {message}
           </div>
         )}
 
-        {/* หมวดหมู่ (Tabs) */}
-        <div style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 12, marginBottom: 16, scrollbarWidth: 'none' }}>
+        {/* แถบหมวดหมู่ (Tabs) */}
+        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10, marginBottom: 14, scrollbarWidth: 'none' }}>
           {categories.map(cat => {
             const isActive = activeCategory === cat.key;
             return (
@@ -213,8 +217,8 @@ export default function CustomerOrderPage() {
                 key={cat.key}
                 onClick={() => setActiveCategory(cat.key)}
                 style={{ 
-                  padding: '10px 20px', 
-                  borderRadius: 20, 
+                  padding: '10px 16px', 
+                  borderRadius: 18, 
                   border: isActive ? 'none' : '1.5px solid #FFC6D9', 
                   whiteSpace: 'nowrap',
                   backgroundColor: isActive ? '#FF7597' : '#FFFFFF', 
@@ -222,7 +226,8 @@ export default function CustomerOrderPage() {
                   fontSize: 14,
                   fontWeight: 'bold',
                   cursor: 'pointer',
-                  boxShadow: isActive ? '0 4px 12px rgba(255, 117, 151, 0.3)' : 'none'
+                  boxShadow: isActive ? '0 4px 12px rgba(255, 117, 151, 0.3)' : 'none',
+                  flexShrink: 0
                 }}>
                 {cat.label}
               </button>
@@ -230,8 +235,8 @@ export default function CustomerOrderPage() {
           })}
         </div>
 
-        {/* รายการอาหาร */}
-        <div style={{ backgroundColor: '#FFFFFF', borderRadius: 24, padding: '12px 20px', border: '2px solid #FFC6D9', boxShadow: '0 4px 16px rgba(255, 182, 193, 0.2)' }}>
+        {/* รายการอาหาร - ปุ่มจัดชิดขวาทุกรายการ */}
+        <div style={{ backgroundColor: '#FFFFFF', borderRadius: 24, padding: '8px 18px', border: '2px solid #FFC6D9', boxShadow: '0 4px 16px rgba(255, 182, 193, 0.2)', width: '100%', boxSizing: 'border-box' }}>
           {filteredOptions.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px 0', color: '#A06B78' }}>
               🐾 ยังไม่มีรายการในหมวดนี้เหมียว
@@ -246,75 +251,78 @@ export default function CustomerOrderPage() {
                     display: 'flex', 
                     justify: 'space-between', 
                     alignItems: 'center', 
-                    padding: '16px 0', 
-                    borderBottom: idx === filteredOptions.length - 1 ? 'none' : '1px solid #FFE4EC'
+                    padding: '14px 0', 
+                    borderBottom: idx === filteredOptions.length - 1 ? 'none' : '1px solid #FFE4EC',
+                    width: '100%'
                   }}>
                   
-                  <span style={{ fontSize: 16, fontWeight: 'bold', color: '#4A2E35' }}>
+                  <span style={{ fontSize: 15, fontWeight: 'bold', color: '#4A2E35', flex: 1, paddingRight: 12 }}>
                     🍦 {item.name}
                   </span>
                   
-                  {qty > 0 ? (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <button 
-                        onClick={() => updateQuantity(item.id, -1)}
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: '50%',
-                          border: '2px solid #FF7597',
-                          backgroundColor: '#FFF0F3',
-                          color: '#FF7597',
-                          fontSize: 18,
-                          fontWeight: 'bold',
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          padding: 0
-                        }}>
-                        -
-                      </button>
-                      <span style={{ fontSize: 16, fontWeight: 'bold', minWidth: 20, textAlign: 'center', color: '#FF4D6D' }}>
-                        {qty}
-                      </span>
+                  <div style={{ flexShrink: 0 }}>
+                    {qty > 0 ? (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                        <button 
+                          onClick={() => updateQuantity(item.id, -1)}
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: '50%',
+                            border: '2px solid #FF7597',
+                            backgroundColor: '#FFF0F3',
+                            color: '#FF7597',
+                            fontSize: 18,
+                            fontWeight: 'bold',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: 0
+                          }}>
+                          -
+                        </button>
+                        <span style={{ fontSize: 16, fontWeight: 'bold', minWidth: 20, textAlign: 'center', color: '#FF4D6D' }}>
+                          {qty}
+                        </span>
+                        <button 
+                          onClick={() => updateQuantity(item.id, 1)}
+                          style={{
+                            width: 32,
+                            height: 32,
+                            borderRadius: '50%',
+                            border: 'none',
+                            backgroundColor: '#FF7597',
+                            color: '#FFFFFF',
+                            fontSize: 18,
+                            fontWeight: 'bold',
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            padding: 0
+                          }}>
+                          +
+                        </button>
+                      </div>
+                    ) : (
                       <button 
                         onClick={() => updateQuantity(item.id, 1)}
-                        style={{
-                          width: 32,
-                          height: 32,
-                          borderRadius: '50%',
-                          border: 'none',
-                          backgroundColor: '#FF7597',
-                          color: '#FFFFFF',
-                          fontSize: 18,
+                        style={{ 
+                          padding: '8px 18px', 
+                          borderRadius: 16, 
+                          border: 'none', 
+                          backgroundColor: '#FF7597', 
+                          color: '#FFFFFF', 
+                          fontSize: 14,
                           fontWeight: 'bold',
                           cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          padding: 0
+                          boxShadow: '0 2px 8px rgba(255, 117, 151, 0.3)'
                         }}>
-                        +
+                        + เพิ่ม
                       </button>
-                    </div>
-                  ) : (
-                    <button 
-                      onClick={() => updateQuantity(item.id, 1)}
-                      style={{ 
-                        padding: '8px 18px', 
-                        borderRadius: 16, 
-                        border: 'none', 
-                        backgroundColor: '#FF7597', 
-                        color: '#FFFFFF', 
-                        fontSize: 14,
-                        fontWeight: 'bold',
-                        cursor: 'pointer',
-                        boxShadow: '0 2px 8px rgba(255, 117, 151, 0.3)'
-                      }}>
-                      + เพิ่ม
-                    </button>
-                  )}
+                    )}
+                  </div>
                 </div>
               );
             })
@@ -327,11 +335,11 @@ export default function CustomerOrderPage() {
       {totalCount > 0 && (
         <div style={{ 
           position: 'fixed', 
-          bottom: 24, 
+          bottom: 20, 
           left: '50%', 
           transform: 'translateX(-50%)', 
           width: 'calc(100% - 32px)', 
-          maxWidth: 640, 
+          maxWidth: 460, 
           zIndex: 1000 
         }}>
           <button 
