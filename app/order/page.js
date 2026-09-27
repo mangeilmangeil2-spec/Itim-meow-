@@ -119,7 +119,7 @@ export default function CustomerOrderPage() {
         await supabase.from('order_item_options').insert(optionRows);
       }
 
-      setMessage('✨ ส่งรายการให้เชฟแมวเรียบร้อยแล้วเหมียว! 🐱');
+      setMessage('✨ ส่งรายการให้ Itim-meow เรียบร้อยแล้วเหมียว! 🐱');
       setQuantities({});
       setTimeout(() => setMessage(''), 4000);
     } catch (err) {
@@ -138,7 +138,7 @@ export default function CustomerOrderPage() {
   if (loading) return (
     <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF0F5', color: '#FF5C8A', fontFamily: 'sans-serif' }}>
       <div style={{ fontSize: 48, marginBottom: 12 }}>🐱🍦</div>
-      <div style={{ fontWeight: 'bold', fontSize: 16 }}>กำลังโหลดเมนูไอติมแสนอร่อย...</div>
+      <div style={{ fontWeight: 'bold', fontSize: 16 }}>กำลังโหลดเมนู Itim-meow...</div>
     </div>
   );
 
@@ -156,7 +156,7 @@ export default function CustomerOrderPage() {
       
       <div style={{ maxWidth: 680, margin: '0 auto', padding: '20px 20px 120px 20px', boxSizing: 'border-box' }}>
         
-        {/* Header โต๊ะ + น้องแมว */}
+        {/* Header โต๊ะ + ชื่อร้าน Itim-meow */}
         <div style={{
           display: 'flex',
           justify: 'space-between',
@@ -171,8 +171,8 @@ export default function CustomerOrderPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <span style={{ fontSize: 36 }}>🐱</span>
             <div>
-              <div style={{ fontSize: 13, color: '#885060', fontWeight: 'bold' }}>โต๊ะของคุณ</div>
-              <div style={{ fontSize: 26, fontWeight: '800', color: '#FF5C8A', lineHeight: '1' }}>
+              <div style={{ fontSize: 13, color: '#FF5C8A', fontWeight: '800' }}>Itim-meow 🍦</div>
+              <div style={{ fontSize: 24, fontWeight: '800', color: '#4A2E35', lineHeight: '1.1' }}>
                 โต๊ะ {tableNumber}
               </div>
             </div>
@@ -352,7 +352,7 @@ export default function CustomerOrderPage() {
               justifyContent: 'center',
               gap: 8
             }}>
-            🧺 สั่งเลย ({totalCount} รายการ) — ส่งให้อาจารย์แมว 🐾
+            🧺 สั่งเลย ({totalCount} รายการ) — ส่งให้ Itim-meow 🐾
           </button>
         </div>
       )}
