@@ -5,10 +5,8 @@ import Link from 'next/link';
 import { supabase } from '../lib/supabase';
 
 export default function HomePage() {
-  // สถานะหน้าจอ: 'home' = หน้าแรก, 'form' = กรอกข้อมูลเปิดโต๊ะ, 'success' = โชว์ QR Code
   const [step, setStep] = useState('home');
 
-  // ข้อมูลฟอร์ม
   const [tableNumber, setTableNumber] = useState('');
   const [adults, setAdults] = useState('0');
   const [childrenCount, setChildrenCount] = useState('0');
@@ -24,11 +22,10 @@ export default function HomePage() {
     }
   }, []);
 
-  // ฟังก์ชันกดเปิดโต๊ะ
   const handleOpenTable = async (e) => {
     e.preventDefault();
     if (!tableNumber || tableNumber.trim() === '') {
-      alert('กรุณากรอกเลขโต๊ะก่อนครับ');
+      alert('กรุณากรอกเลขโต๊ะก่อนครับ 🐾');
       return;
     }
 
@@ -36,7 +33,6 @@ export default function HomePage() {
     try {
       const cleanTableNum = tableNumber.trim();
 
-      // 1. เช็คหรือสร้างโต๊ะในฐานข้อมูล
       let { data: tableData } = await supabase
         .from('tables')
         .select('*')
@@ -54,39 +50,31 @@ export default function HomePage() {
         tableData = newTable;
       }
 
-      // 2. ปิด Session เก่าของโต๊ะนี้ (ถ้ามี)
       await supabase
         .from('sessions')
         .update({ status: 'closed', closed_at: new Date().toISOString() })
         .eq('table_id', tableData.id)
         .eq('status', 'open');
 
-      // 3. สร้าง Session ใหม่สำหรับโต๊ะนี้
       const totalHeadcount = (parseInt(adults) || 0) + (parseInt(childrenCount) || 0);
 
-      let { data: sessionData, error: sessionError } = await supabase
+      let { error: sessionError } = await supabase
         .from('sessions')
         .insert([{
           table_id: tableData.id,
           headcount: totalHeadcount > 0 ? totalHeadcount : 1,
           status: 'open'
-        }])
-        .select()
-        .maybeSingle();
+        }]);
 
-      // ถ้าระบบแจ้ง Error เรื่องฟิลด์ headcount ให้ fallback ไปสร้าง session แบบปกติ
       if (sessionError) {
-        const { error: retryError } = await supabase
+        await supabase
           .from('sessions')
           .insert([{
             table_id: tableData.id,
             status: 'open'
           }]);
-
-        if (retryError) throw retryError;
       }
 
-      // 4. สร้าง URL สำหรับสั่งอาหารประจำโต๊ะ
       const currentOrigin = origin || window.location.origin;
       const orderUrl = `${currentOrigin}/order?table=${encodeURIComponent(cleanTableNum)}`;
       setQrUrl(orderUrl);
@@ -100,7 +88,6 @@ export default function HomePage() {
     }
   };
 
-  // คัดลอกลิงก์
   const handleCopyLink = () => {
     if (qrUrl) {
       navigator.clipboard.writeText(qrUrl);
@@ -112,75 +99,91 @@ export default function HomePage() {
   return (
     <div style={{
       minHeight: '100vh',
-      backgroundColor: '#f9f9fb',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      backgroundColor: '#FFF0F5',
+      backgroundImage: 'radial-gradient(#FFB6C1 1px, transparent 1px)',
+      backgroundSize: '24px 24px',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Kanit", "Mitr", sans-serif',
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      padding: '20px'
+      padding: '20px',
+      color: '#4A2E35'
     }}>
 
-      {/* ================= STEP 1: หน้าแรกสุด ================= */}
+      {/* STEP 1: หน้าแรก */}
       {step === 'home' && (
-        <div style={{ textAlign: 'center', maxWidth: 400, width: '100%' }}>
-          <h1 style={{ fontSize: 32, fontWeight: '800', color: '#111', marginBottom: 12 }}>
-            บุฟเฟต์ไอติม
+        <div style={{
+          textAlign: 'center',
+          maxWidth: 420,
+          width: '100%',
+          backgroundColor: 'rgba(255, 255, 255, 0.95)',
+          padding: '40px 28px',
+          borderRadius: 28,
+          boxShadow: '0 10px 30px rgba(255, 182, 193, 0.4)',
+          border: '3px solid #FFC6D9'
+        }}>
+          <div style={{ fontSize: 64, marginBottom: 8 }}>🐱🍦</div>
+          <h1 style={{ fontSize: 32, fontWeight: '800', color: '#FF5C8A', marginBottom: 8 }}>
+            บุฟเฟต์ไอติมคุณแมว 🐾
           </h1>
-          <p style={{ fontSize: 16, color: '#666', marginBottom: 32 }}>
-            ระบบสั่งอาหารและจัดการออเดอร์หน้าร้าน
+          <p style={{ fontSize: 15, color: '#885060', marginBottom: 28, fontWeight: '500' }}>
+            ระบบสั่งไอติมหวานเจี๊ยบ & จัดการออเดอร์สุดน่ารัก 💖
           </p>
-          <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 14 }}>
             <button
               onClick={() => setStep('form')}
               style={{
-                padding: '12px 24px',
-                borderRadius: 10,
+                padding: '14px 24px',
+                borderRadius: 20,
                 border: 'none',
-                backgroundColor: '#111',
+                backgroundColor: '#FF7597',
                 color: '#fff',
-                fontSize: 15,
+                fontSize: 16,
                 fontWeight: 'bold',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(255, 117, 151, 0.4)'
               }}>
-              สร้าง QR โต๊ะ
+              🐾 สร้าง QR โต๊ะ
             </button>
             <Link href="/staff" style={{ textDecoration: 'none' }}>
               <button style={{
-                padding: '12px 24px',
-                borderRadius: 10,
-                border: '1px solid #111',
-                backgroundColor: '#fff',
-                color: '#111',
-                fontSize: 15,
+                padding: '14px 24px',
+                borderRadius: 20,
+                border: '2px solid #FF9EAA',
+                backgroundColor: '#FFF0F3',
+                color: '#FF5C8A',
+                fontSize: 16,
                 fontWeight: 'bold',
                 cursor: 'pointer'
               }}>
-                หน้าครัว
+                👨‍🍳 หน้าครัว
               </button>
             </Link>
           </div>
         </div>
       )}
 
-      {/* ================= STEP 2: หน้าฟอร์มเปิดโต๊ะ ================= */}
+      {/* STEP 2: ฟอร์มเปิดโต๊ะ */}
       {step === 'form' && (
         <div style={{
-          backgroundColor: '#fff',
-          borderRadius: 20,
+          backgroundColor: '#FFFFFF',
+          borderRadius: 28,
           padding: '36px 28px',
           maxWidth: 420,
           width: '100%',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+          boxShadow: '0 10px 30px rgba(255, 182, 193, 0.4)',
+          border: '3px solid #FFC6D9',
           boxSizing: 'border-box'
         }}>
-          <h2 style={{ fontSize: 24, fontWeight: '800', textAlign: 'center', color: '#111', marginBottom: 24 }}>
-            เปิดโต๊ะบุฟเฟต์ไอติม
+          <div style={{ textAlign: 'center', fontSize: 48, marginBottom: 6 }}>🐾</div>
+          <h2 style={{ fontSize: 24, fontWeight: '800', textAlign: 'center', color: '#FF5C8A', marginBottom: 24 }}>
+            เปิดโต๊ะบุฟเฟต์ไอติมแมว
           </h2>
 
           <form onSubmit={handleOpenTable} style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
             <div>
-              <label style={{ display: 'block', textAlign: 'center', fontWeight: 'bold', fontSize: 15, marginBottom: 8 }}>
-                เลขโต๊ะ
+              <label style={{ display: 'block', textAlign: 'center', fontWeight: 'bold', fontSize: 15, color: '#663B47', marginBottom: 8 }}>
+                🏷️ เลขโต๊ะ
               </label>
               <input
                 type="text"
@@ -191,19 +194,22 @@ export default function HomePage() {
                 style={{
                   width: '100%',
                   padding: '12px 16px',
-                  borderRadius: 10,
-                  border: '1px solid #e0e0e0',
-                  fontSize: 16,
+                  borderRadius: 16,
+                  border: '2px solid #FFC6D9',
+                  backgroundColor: '#FFF9FA',
+                  fontSize: 18,
+                  fontWeight: 'bold',
                   boxSizing: 'border-box',
                   outline: 'none',
-                  textAlign: 'center'
+                  textAlign: 'center',
+                  color: '#FF5C8A'
                 }}
               />
             </div>
 
             <div>
-              <label style={{ display: 'block', textAlign: 'center', fontWeight: 'bold', fontSize: 14, marginBottom: 8 }}>
-                จำนวนผู้ใหญ่ รวมรีฟิลน้ำ (คน) — 209 บาท/คน
+              <label style={{ display: 'block', textAlign: 'center', fontWeight: 'bold', fontSize: 14, color: '#663B47', marginBottom: 8 }}>
+                👑 จำนวนผู้ใหญ่ (คน) — 209 บาท/คน
               </label>
               <input
                 type="number"
@@ -213,8 +219,9 @@ export default function HomePage() {
                 style={{
                   width: '100%',
                   padding: '12px 16px',
-                  borderRadius: 10,
-                  border: '1px solid #e0e0e0',
+                  borderRadius: 16,
+                  border: '2px solid #FFC6D9',
+                  backgroundColor: '#FFF9FA',
                   fontSize: 16,
                   boxSizing: 'border-box',
                   outline: 'none',
@@ -224,8 +231,8 @@ export default function HomePage() {
             </div>
 
             <div>
-              <label style={{ display: 'block', textAlign: 'center', fontWeight: 'bold', fontSize: 14, marginBottom: 8 }}>
-                จำนวนเด็ก/นักศึกษา (คน) — 109 บาท/คน
+              <label style={{ display: 'block', textAlign: 'center', fontWeight: 'bold', fontSize: 14, color: '#663B47', marginBottom: 8 }}>
+                🐣 จำนวนเด็ก/นักศึกษา (คน) — 109 บาท/คน
               </label>
               <input
                 type="number"
@@ -235,8 +242,9 @@ export default function HomePage() {
                 style={{
                   width: '100%',
                   padding: '12px 16px',
-                  borderRadius: 10,
-                  border: '1px solid #e0e0e0',
+                  borderRadius: 16,
+                  border: '2px solid #FFC6D9',
+                  backgroundColor: '#FFF9FA',
                   fontSize: 16,
                   boxSizing: 'border-box',
                   outline: 'none',
@@ -252,10 +260,10 @@ export default function HomePage() {
                 style={{
                   flex: 1,
                   padding: '14px',
-                  borderRadius: 10,
-                  border: '1px solid #ccc',
-                  backgroundColor: '#fff',
-                  color: '#333',
+                  borderRadius: 18,
+                  border: '2px solid #FFC6D9',
+                  backgroundColor: '#FFF0F3',
+                  color: '#885060',
                   fontSize: 15,
                   fontWeight: 'bold',
                   cursor: 'pointer'
@@ -268,55 +276,67 @@ export default function HomePage() {
                 style={{
                   flex: 2,
                   padding: '14px',
-                  borderRadius: 10,
+                  borderRadius: 18,
                   border: 'none',
-                  backgroundColor: '#111',
+                  backgroundColor: '#FF7597',
                   color: '#fff',
                   fontSize: 16,
                   fontWeight: 'bold',
-                  cursor: 'pointer'
+                  cursor: 'pointer',
+                  boxShadow: '0 4px 14px rgba(255, 117, 151, 0.4)'
                 }}>
-                {loading ? 'กำลังเปิดโต๊ะ...' : 'เปิดโต๊ะ'}
+                {loading ? 'กำลังเปิดโต๊ะ...' : '✨ เปิดโต๊ะเลย'}
               </button>
             </div>
           </form>
         </div>
       )}
 
-      {/* ================= STEP 3: หน้าแสดง QR Code ================= */}
+      {/* STEP 3: โชว์ QR Code */}
       {step === 'success' && (
         <div style={{
-          backgroundColor: '#fff',
-          borderRadius: 20,
+          backgroundColor: '#FFFFFF',
+          borderRadius: 28,
           padding: '36px 28px',
           maxWidth: 420,
           width: '100%',
-          boxShadow: '0 4px 20px rgba(0,0,0,0.04)',
+          boxShadow: '0 10px 30px rgba(255, 182, 193, 0.4)',
+          border: '3px solid #FFC6D9',
           boxSizing: 'border-box',
           textAlign: 'center'
         }}>
-          <h2 style={{ fontSize: 22, fontWeight: '800', color: '#111', marginBottom: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            <span>✅</span> เปิดโต๊ะสำเร็จ
+          <div style={{ fontSize: 40, marginBottom: 4 }}>😻🎉</div>
+          <h2 style={{ fontSize: 22, fontWeight: '800', color: '#FF5C8A', marginBottom: 8 }}>
+            เปิดโต๊ะสำเร็จแล้วเหมียว!
           </h2>
 
-          <p style={{ fontSize: 15, fontWeight: 'bold', color: '#111', marginBottom: 20 }}>
-            โต๊ะ {tableNumber} | ผู้ใหญ่ {adults} ท่าน | เด็ก/นักศึกษา {childrenCount} ท่าน
+          <p style={{ fontSize: 14, fontWeight: 'bold', color: '#663B47', marginBottom: 20 }}>
+            โต๊ะ {tableNumber} | ผู้ใหญ่ {adults} ท่าน | เด็ก {childrenCount} ท่าน
           </p>
 
-          <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 20 }}>
+          <div style={{
+            display: 'flex',
+            justify: 'center',
+            marginBottom: 20,
+            padding: 16,
+            backgroundColor: '#FFF0F3',
+            borderRadius: 20,
+            border: '2px dashed #FFB3C6'
+          }}>
             <img
               src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(qrUrl)}`}
               alt="QR Code"
-              style={{ width: 220, height: 220, borderRadius: 12 }}
+              style={{ width: 200, height: 200, borderRadius: 12 }}
             />
           </div>
 
           <div style={{
             padding: '12px',
-            backgroundColor: '#f5f5f7',
-            borderRadius: 10,
+            backgroundColor: '#FFF9FA',
+            borderRadius: 14,
+            border: '1px solid #FFC6D9',
             fontSize: 13,
-            color: '#555',
+            color: '#885060',
             wordBreak: 'break-all',
             marginBottom: 16
           }}>
@@ -329,15 +349,15 @@ export default function HomePage() {
               style={{
                 width: '100%',
                 padding: '12px',
-                borderRadius: 10,
-                border: '1px solid #111',
-                backgroundColor: '#fff',
-                color: '#111',
+                borderRadius: 16,
+                border: '2px solid #FF9EAA',
+                backgroundColor: '#FFF0F3',
+                color: '#FF5C8A',
                 fontSize: 15,
                 fontWeight: 'bold',
                 cursor: 'pointer'
               }}>
-              {copied ? '✅ คัดลอกสำเร็จ!' : 'คัดลอกลิงก์'}
+              {copied ? '✅ คัดลอกลิงก์เรียบร้อย!' : '📋 คัดลอกลิงก์'}
             </button>
 
             <button
@@ -350,15 +370,16 @@ export default function HomePage() {
               style={{
                 width: '100%',
                 padding: '14px',
-                borderRadius: 10,
+                borderRadius: 16,
                 border: 'none',
-                backgroundColor: '#111',
+                backgroundColor: '#FF7597',
                 color: '#fff',
                 fontSize: 15,
                 fontWeight: 'bold',
-                cursor: 'pointer'
+                cursor: 'pointer',
+                boxShadow: '0 4px 14px rgba(255, 117, 151, 0.4)'
               }}>
-              เปิดโต๊ะใหม่
+              ➕ เปิดโต๊ะถัดไป
             </button>
           </div>
         </div>
