@@ -1,233 +1,182 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { supabase } from '../../lib/supabase';
+import { useSearchParams } from 'next/navigation';
+import { supabase } from '../../lib/supabase'; // ปรับ path ตามโครงสร้างโฟลเดอร์ของคุณ
 
-export default function CustomerOrderPage() {
-  const [tableNumber, setTableNumber] = useState('1');
-  const [sessionId, setSessionId] = useState(null);
-  const [menuItems, setMenuItems] = useState([]);
-  const [buffetOptions, setBuffetOptions] = useState([]);
+// 1. กำหนดหมวดหมู่รายการ
+const categories = [
+  { key: 'flavor', label: '🍦 ไอติม (รส)' },
+  { key: 'topping', label: '🍡 ท็อปปิ้ง' },
+  { key: 'sauce', label: '🍯 ซอส' },
+  { key: 'drink', label: '🥤 เครื่องดื่ม' },
+];
+
+// 2. ฟังก์ชันเลือกสติ๊กเกอร์ตามหมวดหมู่ (รองรับทั้ง key อังกฤษ และ คำไทย)
+const getCategoryIcon = (category) => {
+  if (!category) return '🍦';
+  if (category === 'flavor' || category.includes('ไอติม')) return '🍦';
+  if (category === 'topping' || category.includes('ท็อปปิ้ง')) return '🍡';
+  if (category === 'sauce' || category.includes('ซอส')) return '🍯';
+  if (category === 'drink' || category.includes('เครื่องดื่ม')) return '🥤';
+  return '🍦';
+};
+
+export default function OrderPage() {
+  const searchParams = useSearchParams();
+  const sessionId = searchParams?.get('session_id');
+
   const [activeCategory, setActiveCategory] = useState('flavor');
-  const [quantities, setQuantities] = useState({});
+  const [buffetOptions, setBuffetOptions] = useState([]);
+  const [selectedOptions, setSelectedOptions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [message, setMessage] = useState('');
+  const [submitting, setSubmitting] = useState(false);
 
+  // ดึงข้อมูลเมนูอาหารจาก Supabase
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const table = params.get('table') || '1';
-    setTableNumber(table);
-    loadData(table);
+    async function fetchOptions() {
+      try {
+        setLoading(true);
+        const { data, error } = await supabase
+          .from('buffet_options')
+          .select('*')
+          .order('id', { ascending: true });
+
+        if (error) throw error;
+        setBuffetOptions(data || []);
+      } catch (err) {
+        console.error('Error fetching options:', err);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    fetchOptions();
   }, []);
 
-  const loadData = async (tableNum) => {
-    setLoading(true);
-    try {
-      const { data: tableData } = await supabase
-        .from('tables')
-        .select('*')
-        .eq('table_number', tableNum)
-        .maybeSingle();
+  // กรองรายการตามหมวดหมู่ที่เลือกอยู่
+  const filteredOptions = buffetOptions.filter(
+    (o) => o.category === activeCategory
+  );
 
-      if (tableData) {
-        const { data: sessionData } = await supabase
-          .from('sessions')
-          .select('*')
-          .eq('table_id', tableData.id)
-          .eq('status', 'open')
-          .maybeSingle();
-
-        if (sessionData) setSessionId(sessionData.id);
-      }
-
-      const { data: options } = await supabase
-        .from('buffet_options')
-        .select('*')
-        .eq('is_available', true)
-        .order('sort_order', { ascending: true });
-
-      setBuffetOptions(options || []);
-
-      const { data: menus } = await supabase.from('menu_items').select('*');
-      setMenuItems(menus || []);
-
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const updateQuantity = (id, delta) => {
-    setQuantities(prev => {
-      const current = prev[id] || 0;
-      const next = current + delta;
-      const newQty = { ...prev };
-      if (next <= 0) {
-        delete newQty[id];
+  // ฟังก์ชันเลือก / ยกเลิกรายการ
+  const toggleSelectOption = (option) => {
+    setSelectedOptions((prev) => {
+      const exists = prev.find((item) => item.id === option.id);
+      if (exists) {
+        return prev.filter((item) => item.id !== option.id);
       } else {
-        newQty[id] = next;
+        return [...prev, option];
       }
-      return newQty;
     });
   };
 
-  const totalCount = Object.values(quantities).reduce((sum, q) => sum + q, 0);
-
-  const handleSendOrder = async () => {
-    if (!sessionId) {
-      alert('โต๊ะนี้ยังไม่ได้ทำการเปิดระบบ กรุณาติดต่อพนักงานครับ 🐾');
-      return;
-    }
-    if (totalCount === 0) {
-      alert('กรุณาเลือกอย่างน้อย 1 รายการครับ 🍦');
+  // ฟังก์ชันส่งออเดอร์
+  const handleSubmitOrder = async () => {
+    if (selectedOptions.length === 0) {
+      alert('กรุณาเลือกรายการอาหารก่อนสั่งเหมียว! 🐾');
       return;
     }
 
-    setLoading(true);
     try {
-      const buffetMenu = menuItems.find(m => m.is_buffet) || menuItems[0];
+      setSubmitting(true);
 
-      const { data: order } = await supabase
+      // 1. สร้าง Order
+      const { data: orderData, error: orderErr } = await supabase
         .from('orders')
-        .insert([{ session_id: sessionId }])
+        .insert([{ session_id: sessionId ? parseInt(sessionId) : null, status: 'pending' }])
         .select()
         .single();
 
-      const { data: orderItem } = await supabase
+      if (orderErr) throw orderErr;
+
+      // 2. สร้าง Order Item
+      const { data: itemData, error: itemErr } = await supabase
         .from('order_items')
-        .insert([{
-          order_id: order.id,
-          menu_item_id: buffetMenu?.id,
-          quantity: 1,
-          is_free_refill: true
-        }])
+        .insert([{ order_id: orderData.id, quantity: 1 }])
         .select()
         .single();
 
-      const optionRows = [];
-      Object.entries(quantities).forEach(([optId, qty]) => {
-        for (let i = 0; i < qty; i++) {
-          optionRows.push({
-            order_item_id: orderItem.id,
-            buffet_option_id: optId
-          });
-        }
-      });
+      if (itemErr) throw itemErr;
 
-      if (optionRows.length > 0) {
-        await supabase.from('order_item_options').insert(optionRows);
-      }
+      // 3. สร้าง Order Item Options
+      const optionInserts = selectedOptions.map((opt) => ({
+        order_item_id: itemData.id,
+        option_id: opt.id,
+      }));
 
-      setMessage('✨ ส่งรายการให้ Itim-meow เรียบร้อยแล้วเหมียว! 🐱');
-      setQuantities({});
-      setTimeout(() => setMessage(''), 4000);
+      const { error: optErr } = await supabase
+        .from('order_item_options')
+        .insert(optionInserts);
+
+      if (optErr) throw optErr;
+
+      alert('ส่งออเดอร์เรียบร้อยแล้วเหมียว! 🍦🎉');
+      setSelectedOptions([]);
     } catch (err) {
-      alert('เกิดข้อผิดพลาด: ' + err.message);
+      console.error('Submit order error:', err);
+      alert('เกิดข้อผิดพลาดในการส่งออเดอร์: ' + err.message);
     } finally {
-      setLoading(false);
+      setSubmitting(false);
     }
   };
 
-  const handleCallBill = async () => {
-    if (confirm('คุณต้องการเรียกพนักงานเช็คบิลใช่ไหมเหมียว? 🐱')) {
-      alert('แจ้งพนักงานให้แล้วครับ รอสักครู่นะครับ 🐾');
-    }
-  };
-
-  if (loading) return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF0F5', color: '#FF5C8A', fontFamily: 'sans-serif' }}>
-      <div style={{ fontSize: 48, marginBottom: 12 }}>🐱🍦</div>
-      <div style={{ fontWeight: 'bold', fontSize: 16 }}>กำลังโหลดเมนู Itim-meow...</div>
-    </div>
-  );
-
-  const categories = [
-    { key: 'flavor', label: '🍦 ไอติม (รส)' },
-    { key: 'topping', label: '🍡 ท็อปปิ้ง' },
-    { key: 'sauce', label: '🍯 ซอส' },
-    { key: 'drink', label: '🥤 เครื่องดื่ม' },
-  ];
-
-  const filteredOptions = buffetOptions.filter(o => o.category === activeCategory);
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF0F5', color: '#FF5C8A', fontFamily: 'sans-serif' }}>
+        <div style={{ fontSize: 48, marginBottom: 12 }}>🍦🐱</div>
+        <div style={{ fontWeight: 'bold', fontSize: 18 }}>กำลังโหลดเมนูอาหาร...</div>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ minHeight: '100vh', backgroundColor: '#FFF5F7', fontFamily: '-apple-system, BlinkMacSystemFont, "Kanit", "Mitr", sans-serif', color: '#4A2E35' }}>
-      
-      {/* จำกัดความกว้างแอปให้อยู่ตรงกลางหน้าจอ ไม่ยืดออกข้างกว้างเกินไป */}
-      <div style={{ maxWidth: 500, margin: '0 auto', padding: '16px 16px 120px 16px', boxSizing: 'border-box' }}>
+    <div style={{
+      minHeight: '100vh',
+      backgroundColor: '#FFF5F7',
+      padding: '20px 16px',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Kanit", "Mitr", sans-serif',
+      color: '#4A2E35'
+    }}>
+      <div style={{ maxWidth: 600, margin: '0 auto' }}>
         
-        {/* Header โต๊ะ + ปุ่มเช็คบิล */}
-        <div style={{
-          display: 'flex',
-          justify: 'space-between',
-          alignItems: 'center',
-          marginBottom: 16,
-          padding: '14px 18px',
-          backgroundColor: '#FFFFFF',
-          borderRadius: 24,
-          boxShadow: '0 4px 16px rgba(255, 182, 193, 0.3)',
-          border: '2px solid #FFC6D9',
-          width: '100%',
-          boxSizing: 'border-box'
-        }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 32 }}>🐱</span>
-            <div>
-              <div style={{ fontSize: 12, color: '#FF5C8A', fontWeight: '800' }}>Itim-meow 🍦</div>
-              <div style={{ fontSize: 22, fontWeight: '800', color: '#4A2E35', lineHeight: '1.1' }}>
-                โต๊ะ {tableNumber}
-              </div>
-            </div>
-          </div>
-
-          <button 
-            onClick={handleCallBill}
-            style={{ 
-              padding: '10px 16px', 
-              borderRadius: 18, 
-              border: '2px solid #FFB3C6', 
-              backgroundColor: '#FFF0F3', 
-              color: '#FF4D6D',
-              fontSize: 13, 
-              fontWeight: 'bold', 
-              cursor: 'pointer', 
-              display: 'flex', 
-              alignItems: 'center', 
-              gap: 6,
-              flexShrink: 0
-            }}>
-            💰 เรียกเช็คบิล
-          </button>
+        {/* หัวข้อหน้า */}
+        <div style={{ textAlign: 'center', marginBottom: 20 }}>
+          <h1 style={{ fontSize: 24, fontWeight: '800', color: '#FF5C8A', margin: 0 }}>
+            🍨 เลือกเมนูไอศกรีม & ท็อปปิ้ง
+          </h1>
+          <p style={{ fontSize: 13, color: '#885060', marginTop: 4 }}>
+            สั่งได้ไม่อั้นตามใจชอบเหมียว 🐾
+          </p>
         </div>
 
-        {/* แจ้งเตือนส่งออเดอร์ */}
-        {message && (
-          <div style={{ padding: '12px 16px', backgroundColor: '#E8F5E9', color: '#2E7D32', borderRadius: 16, marginBottom: 16, textAlign: 'center', fontWeight: 'bold', border: '1.5px solid #C8E6C9' }}>
-            {message}
-          </div>
-        )}
-
-        {/* แถบหมวดหมู่ (Tabs) */}
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 10, marginBottom: 14, scrollbarWidth: 'none' }}>
-          {categories.map(cat => {
+        {/* แถบปุ่มเลือกหมวดหมู่ */}
+        <div style={{
+          display: 'flex',
+          gap: 8,
+          overflowX: 'auto',
+          paddingBottom: 8,
+          marginBottom: 16
+        }}>
+          {categories.map((cat) => {
             const isActive = activeCategory === cat.key;
             return (
-              <button 
+              <button
                 key={cat.key}
+                type="button"
                 onClick={() => setActiveCategory(cat.key)}
-                style={{ 
-                  padding: '10px 16px', 
-                  borderRadius: 18, 
-                  border: isActive ? 'none' : '1.5px solid #FFC6D9', 
-                  whiteSpace: 'nowrap',
-                  backgroundColor: isActive ? '#FF7597' : '#FFFFFF', 
-                  color: isActive ? '#FFFFFF' : '#663B47', 
-                  fontSize: 14,
+                style={{
+                  padding: '10px 16px',
+                  borderRadius: 20,
+                  border: isActive ? 'none' : '2px solid #FFC6D9',
+                  backgroundColor: isActive ? '#FF7597' : '#FFFFFF',
+                  color: isActive ? '#FFFFFF' : '#885060',
                   fontWeight: 'bold',
+                  fontSize: 14,
                   cursor: 'pointer',
+                  whiteSpace: 'nowrap',
                   boxShadow: isActive ? '0 4px 12px rgba(255, 117, 151, 0.3)' : 'none',
-                  flexShrink: 0
+                  transition: 'all 0.2s'
                 }}>
                 {cat.label}
               </button>
@@ -235,136 +184,108 @@ export default function CustomerOrderPage() {
           })}
         </div>
 
-        {/* รายการอาหาร - ปุ่มจัดชิดขวาทุกรายการ */}
-        <div style={{ backgroundColor: '#FFFFFF', borderRadius: 24, padding: '8px 18px', border: '2px solid #FFC6D9', boxShadow: '0 4px 16px rgba(255, 182, 193, 0.2)', width: '100%', boxSizing: 'border-box' }}>
+        {/* กล่องแสดงรายการอาหารตามหมวดหมู่ที่เลือก */}
+        <div style={{
+          backgroundColor: '#FFFFFF',
+          borderRadius: 24,
+          border: '2px solid #FFC6D9',
+          padding: 16,
+          boxShadow: '0 4px 16px rgba(255, 182, 193, 0.2)',
+          marginBottom: 100
+        }}>
           {filteredOptions.length === 0 ? (
             <div style={{ textAlign: 'center', padding: '40px 0', color: '#A06B78' }}>
-              🐾 ยังไม่มีรายการในหมวดนี้เหมียว
+              ยังไม่มีรายการในหมวดหมู่นี้เหมียว
             </div>
           ) : (
-            filteredOptions.map((item, idx) => {
-              const qty = quantities[item.id] || 0;
-              return (
-                <div 
-                  key={item.id}
-                  style={{ 
-                    display: 'flex', 
-                    justify: 'space-between', 
-                    alignItems: 'center', 
-                    padding: '14px 0', 
-                    borderBottom: idx === filteredOptions.length - 1 ? 'none' : '1px solid #FFE4EC',
-                    width: '100%'
-                  }}>
-                  
-                  <span style={{ fontSize: 15, fontWeight: 'bold', color: '#4A2E35', flex: 1, paddingRight: 12 }}>
-                    🍦 {item.name}
-                  </span>
-                  
-                  <div style={{ flexShrink: 0 }}>
-                    {qty > 0 ? (
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                        <button 
-                          onClick={() => updateQuantity(item.id, -1)}
-                          style={{
-                            width: 32,
-                            height: 32,
-                            borderRadius: '50%',
-                            border: '2px solid #FF7597',
-                            backgroundColor: '#FFF0F3',
-                            color: '#FF7597',
-                            fontSize: 18,
-                            fontWeight: 'bold',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            padding: 0
-                          }}>
-                          -
-                        </button>
-                        <span style={{ fontSize: 16, fontWeight: 'bold', minWidth: 20, textAlign: 'center', color: '#FF4D6D' }}>
-                          {qty}
-                        </span>
-                        <button 
-                          onClick={() => updateQuantity(item.id, 1)}
-                          style={{
-                            width: 32,
-                            height: 32,
-                            borderRadius: '50%',
-                            border: 'none',
-                            backgroundColor: '#FF7597',
-                            color: '#FFFFFF',
-                            fontSize: 18,
-                            fontWeight: 'bold',
-                            cursor: 'pointer',
-                            display: 'flex',
-                            alignItems: 'center',
-                            justifyContent: 'center',
-                            padding: 0
-                          }}>
-                          +
-                        </button>
-                      </div>
-                    ) : (
-                      <button 
-                        onClick={() => updateQuantity(item.id, 1)}
-                        style={{ 
-                          padding: '8px 18px', 
-                          borderRadius: 16, 
-                          border: 'none', 
-                          backgroundColor: '#FF7597', 
-                          color: '#FFFFFF', 
-                          fontSize: 14,
-                          fontWeight: 'bold',
-                          cursor: 'pointer',
-                          boxShadow: '0 2px 8px rgba(255, 117, 151, 0.3)'
-                        }}>
-                        + เพิ่ม
-                      </button>
-                    )}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {filteredOptions.map((o) => {
+                const isSelected = selectedOptions.some((item) => item.id === o.id);
+                return (
+                  <div
+                    key={o.id}
+                    onClick={() => toggleSelectOption(o)}
+                    style={{
+                      display: 'flex',
+                      justify: 'space-between',
+                      alignItems: 'center',
+                      padding: '12px 16px',
+                      borderRadius: 16,
+                      backgroundColor: isSelected ? '#FFF0F3' : '#FFF9FA',
+                      border: isSelected ? '2px solid #FF7597' : '1px solid #FFE4EC',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s'
+                    }}>
+                    <span style={{ fontSize: 16, fontWeight: 'bold', color: '#4A2E35' }}>
+                      {getCategoryIcon(activeCategory)} {o.name}
+                    </span>
+                    <button
+                      type="button"
+                      style={{
+                        padding: '6px 14px',
+                        borderRadius: 12,
+                        border: 'none',
+                        backgroundColor: isSelected ? '#FF4D6D' : '#FF7597',
+                        color: '#FFFFFF',
+                        fontWeight: 'bold',
+                        fontSize: 13,
+                        cursor: 'pointer'
+                      }}>
+                      {isSelected ? '✓ เลือกแล้ว' : '+ เพิ่ม'}
+                    </button>
                   </div>
-                </div>
-              );
-            })
+                );
+              })}
+            </div>
           )}
         </div>
 
+        {/* แถบแสดงสรุปรายการและปุ่มส่งออเดอร์ (ลอยด้านล่าง) */}
+        {selectedOptions.length > 0 && (
+          <div style={{
+            position: 'fixed',
+            bottom: 20,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 'calc(100% - 32px)',
+            maxWidth: 568,
+            backgroundColor: '#FFFFFF',
+            borderRadius: 20,
+            padding: '14px 20px',
+            border: '2px solid #FF7597',
+            boxShadow: '0 8px 24px rgba(255, 77, 109, 0.25)',
+            display: 'flex',
+            justify: 'space-between',
+            alignItems: 'center',
+            zIndex: 100
+          }}>
+            <div>
+              <div style={{ fontSize: 12, color: '#885060' }}>รายการที่เลือก</div>
+              <div style={{ fontSize: 16, fontWeight: '800', color: '#FF4D6D' }}>
+                {selectedOptions.length} รายการ
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={handleSubmitOrder}
+              disabled={submitting}
+              style={{
+                padding: '12px 24px',
+                borderRadius: 16,
+                border: 'none',
+                backgroundColor: submitting ? '#CCCCCC' : '#FF4D6D',
+                color: '#FFFFFF',
+                fontWeight: 'bold',
+                fontSize: 15,
+                cursor: submitting ? 'not-allowed' : 'pointer',
+                boxShadow: '0 4px 12px rgba(255, 77, 109, 0.3)'
+              }}>
+              {submitting ? 'กำลังส่ง...' : '🚀 ยืนยันส่งออเดอร์'}
+            </button>
+          </div>
+        )}
+
       </div>
-
-      {/* แถบตะกร้าลอยด้านล่าง */}
-      {totalCount > 0 && (
-        <div style={{ 
-          position: 'fixed', 
-          bottom: 20, 
-          left: '50%', 
-          transform: 'translateX(-50%)', 
-          width: 'calc(100% - 32px)', 
-          maxWidth: 460, 
-          zIndex: 1000 
-        }}>
-          <button 
-            onClick={handleSendOrder}
-            style={{ 
-              width: '100%', 
-              padding: '16px 24px', 
-              borderRadius: 20, 
-              border: 'none', 
-              backgroundColor: '#FF4D6D', 
-              color: '#FFFFFF', 
-              fontSize: 16, 
-              fontWeight: 'bold', 
-              boxShadow: '0 8px 24px rgba(255, 77, 109, 0.4)', 
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8
-            }}>
-            🧺 สั่งเลย ({totalCount} รายการ) — ส่งให้ Itim-meow 🐾
-          </button>
-        </div>
-      )}
-
     </div>
   );
 }
