@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { supabase } from '../../lib/supabase'; // ปรับ Path ให้ตรงกับไฟล์ supabase.js ของคุณ
+import { supabase } from '../../lib/supabase'; // ปรับ Path ตามโครงสร้างโปรเจกต์ของคุณ
 
 // 1. หมวดหมู่รายการอาหาร
 const categories = [
@@ -12,14 +12,13 @@ const categories = [
   { key: 'drink', label: '🥤 เครื่องดื่ม' },
 ];
 
-// 2. ฟังก์ชันตัดอีโมจิเก่าที่ติดมากับชื่อเมนูในฐานข้อมูลออก
+// 2. ฟังก์ชันตัดอีโมจิเก่าที่ติดมากับชื่อใน DB ออก
 const cleanName = (name) => {
   if (!name) return '';
-  // ลบอีโมจิและช่องว่างที่ติดอยู่หน้าชื่อรายการ
   return name.replace(/^[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\s]+/gu, '').trim();
 };
 
-// 3. ฟังก์ชันเลือกสติ๊กเกอร์ตามหมวดหมู่ที่เลือก
+// 3. ฟังก์ชันเลือกไอคอนตามหมวดหมู่
 const getCategoryIcon = (category) => {
   if (!category) return '🍦';
   const cat = String(category).toLowerCase().trim();
@@ -42,7 +41,7 @@ function OrderComponent() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
 
-  // ดึงข้อมูลรายการอาหารจาก Supabase
+  // ดึงข้อมูลเมนูอาหาร
   useEffect(() => {
     async function fetchOptions() {
       try {
@@ -64,7 +63,7 @@ function OrderComponent() {
     fetchOptions();
   }, []);
 
-  // กรองรายการอาหารตามหมวดหมู่ที่เลือก (รองรับทั้งภาษาไทยและอังกฤษ)
+  // กรองรายการตามหมวดหมู่
   const filteredOptions = buffetOptions.filter((o) => {
     if (!o.category) return false;
     const itemCat = String(o.category).toLowerCase().trim();
@@ -78,7 +77,7 @@ function OrderComponent() {
     return itemCat === activeCat;
   });
 
-  // ฟังก์ชันเลือก / ยกเลิกรายการ
+  // เลือก / ยกเลิกรายการ
   const toggleSelectOption = (option) => {
     setSelectedOptions((prev) => {
       const exists = prev.find((item) => item.id === option.id);
@@ -100,7 +99,6 @@ function OrderComponent() {
     try {
       setSubmitting(true);
 
-      // 1. สร้าง Record ในตาราง orders
       const { data: orderData, error: orderErr } = await supabase
         .from('orders')
         .insert([{ session_id: sessionId ? parseInt(sessionId) : null, status: 'pending' }])
@@ -109,7 +107,6 @@ function OrderComponent() {
 
       if (orderErr) throw orderErr;
 
-      // 2. สร้าง Record ในตาราง order_items
       const { data: itemData, error: itemErr } = await supabase
         .from('order_items')
         .insert([{ order_id: orderData.id, quantity: 1 }])
@@ -118,7 +115,6 @@ function OrderComponent() {
 
       if (itemErr) throw itemErr;
 
-      // 3. สร้าง Record ในตาราง order_item_options
       const optionInserts = selectedOptions.map((opt) => ({
         order_item_id: itemData.id,
         option_id: opt.id,
@@ -130,13 +126,31 @@ function OrderComponent() {
 
       if (optErr) throw optErr;
 
-      alert('ส่งออเดอร์ให้ห้องครัวเรียบร้อยแล้วเหมียว! 🍨🎉');
+      alert('ส่งออเดอร์เรียบร้อยแล้วเหมียว! 🍨🎉');
       setSelectedOptions([]);
     } catch (err) {
       console.error('Submit order error:', err);
       alert('เกิดข้อผิดพลาดในการส่งออเดอร์: ' + err.message);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  // ฟังก์ชันเรียกเช็คบิล
+  const handleRequestBill = async () => {
+    if (!confirm('คุณต้องการเรียกเช็คบิลใช่หรือไม่เหมียว? 🧾')) return;
+
+    try {
+      if (sessionId) {
+        await supabase
+          .from('sessions')
+          .update({ status: 'bill_requested' })
+          .eq('id', sessionId);
+      }
+      alert('แจ้งพนักงานเรียกเช็คบิลเรียบร้อยแล้วเหมียว! กรุณารอสักครู่ 🐾🧾');
+    } catch (err) {
+      console.error('Request bill error:', err);
+      alert('เกิดข้อผิดพลาดในการเรียกเช็คบิล: ' + err.message);
     }
   };
 
@@ -159,14 +173,47 @@ function OrderComponent() {
     }}>
       <div style={{ maxWidth: 600, margin: '0 auto' }}>
         
-        {/* Header */}
-        <div style={{ textAlign: 'center', marginBottom: 20 }}>
-          <h1 style={{ fontSize: 24, fontWeight: '800', color: '#FF5C8A', margin: 0 }}>
-            🍨 เลือกเมนูไอศกรีม & ท็อปปิ้ง
-          </h1>
-          <p style={{ fontSize: 13, color: '#885060', marginTop: 4 }}>
-            สั่งได้ไม่อั้นตามใจชอบเหมียว 🐾
-          </p>
+        {/* Header + ปุ่มเช็คบิล */}
+        <div style={{
+          display: 'flex',
+          justify: 'space-between',
+          alignItems: 'center',
+          marginBottom: 20,
+          backgroundColor: '#FFFFFF',
+          padding: '12px 18px',
+          borderRadius: 20,
+          boxShadow: '0 2px 10px rgba(255, 182, 193, 0.2)',
+          border: '1px solid #FFE4EC'
+        }}>
+          <div>
+            <h1 style={{ fontSize: 20, fontWeight: '800', color: '#FF5C8A', margin: 0 }}>
+              🍨 เลือกเมนูไอศกรีม
+            </h1>
+            <p style={{ fontSize: 12, color: '#885060', margin: '2px 0 0 0' }}>
+              สั่งได้ไม่อั้นตามใจชอบเหมียว 🐾
+            </p>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleRequestBill}
+            style={{
+              padding: '8px 14px',
+              borderRadius: 14,
+              border: '2px solid #FF7597',
+              backgroundColor: '#FFF0F3',
+              color: '#FF4D6D',
+              fontWeight: 'bold',
+              fontSize: 13,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              boxShadow: '0 2px 8px rgba(255, 117, 151, 0.15)',
+              whiteSpace: 'nowrap'
+            }}>
+            🧾 เช็คบิล
+          </button>
         </div>
 
         {/* แถบหมวดหมู่ */}
@@ -203,7 +250,7 @@ function OrderComponent() {
           })}
         </div>
 
-        {/* รายการเมนู */}
+        {/* กล่องแสดงรายการเมนู (จัดระยะเรียงซ้าย-ขวาใหม่) */}
         <div style={{
           backgroundColor: '#FFFFFF',
           borderRadius: 24,
@@ -217,11 +264,11 @@ function OrderComponent() {
               ยังไม่มีรายการในหมวดหมู่นี้เหมียว 🐱
             </div>
           ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {filteredOptions.map((o) => {
                 const isSelected = selectedOptions.some((item) => item.id === o.id);
-                const icon = getCategoryIcon(activeCategory); // ดึงสติ๊กเกอร์ตามหมวดหมู่ที่เลือก
-                const nameWithoutIcon = cleanName(o.name);    // ตัดสติ๊กเกอร์เดิมออกจากชื่อ
+                const icon = getCategoryIcon(activeCategory);
+                const nameWithoutIcon = cleanName(o.name);
 
                 return (
                   <div
@@ -231,27 +278,38 @@ function OrderComponent() {
                       display: 'flex',
                       justify: 'space-between',
                       alignItems: 'center',
-                      padding: '12px 16px',
+                      padding: '14px 18px',
                       borderRadius: 16,
                       backgroundColor: isSelected ? '#FFF0F3' : '#FFF9FA',
                       border: isSelected ? '2px solid #FF7597' : '1px solid #FFE4EC',
                       cursor: 'pointer',
-                      transition: 'all 0.15s'
+                      transition: 'all 0.15s',
+                      width: '100%',
+                      boxSizing: 'border-box'
                     }}>
-                    <span style={{ fontSize: 16, fontWeight: 'bold', color: '#4A2E35' }}>
-                      {icon} {nameWithoutIcon}
-                    </span>
+                    
+                    {/* ชื่อเมนู + ไอคอนอยู่ซ้ายมือ */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flex: 1, minWidth: 0, paddingRight: 12 }}>
+                      <span style={{ fontSize: 20, flexShrink: 0 }}>{icon}</span>
+                      <span style={{ fontSize: 16, fontWeight: 'bold', color: '#4A2E35', wordBreak: 'break-word' }}>
+                        {nameWithoutIcon}
+                      </span>
+                    </div>
+
+                    {/* ปุ่มเลือกขยับไปขวาสุด */}
                     <button
                       type="button"
                       style={{
-                        padding: '6px 14px',
-                        borderRadius: 12,
+                        padding: '8px 18px',
+                        borderRadius: 14,
                         border: 'none',
                         backgroundColor: isSelected ? '#FF4D6D' : '#FF7597',
                         color: '#FFFFFF',
                         fontWeight: 'bold',
-                        fontSize: 13,
-                        cursor: 'pointer'
+                        fontSize: 14,
+                        cursor: 'pointer',
+                        flexShrink: 0,
+                        boxShadow: isSelected ? '0 2px 8px rgba(255, 77, 109, 0.3)' : 'none'
                       }}>
                       {isSelected ? '✓ เลือกแล้ว' : '+ เพิ่ม'}
                     </button>
@@ -262,7 +320,7 @@ function OrderComponent() {
           )}
         </div>
 
-        {/* แถบสรุปรายการ & ปุ่มยืนยันส่งออเดอร์ */}
+        {/* แถบสรุปรายการ & ปุ่มส่งออเดอร์ */}
         {selectedOptions.length > 0 && (
           <div style={{
             position: 'fixed',
