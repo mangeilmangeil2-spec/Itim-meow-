@@ -119,7 +119,7 @@ export default function StaffPage() {
         });
       }
 
-      // 5. รวมข้อมูลทั้งหมดเข้าด้วยกัน (ใช้ String(...) ป้องกัน Type Mismatch)
+      // 5. รวมข้อมูลทั้งหมดเข้าด้วยกัน
       const formattedSessions = sessionsData.map(session => {
         const sessionOrders = (ordersData || [])
           .filter(o => String(o.session_id) === String(session.id))
