@@ -121,7 +121,7 @@ function OrderComponent() {
 
       const { data: orderData, error: orderErr } = await supabase
         .from('orders')
-        .insert([{ session_id: sessionId ? parseInt(sessionId) : null, status: 'pending' }])
+        .insert([{ session_id: sessionId || null, status: 'pending' }])
         .select()
         .single();
 
