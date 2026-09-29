@@ -7,24 +7,27 @@ export default function StaffPage() {
   const [tables, setTables] = useState([]);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
+// ดึงข้อมูลออเดอร์พร้อมเมนูอาหารจาก buffet_options
+const { data: ordersData, error: orderErr } = await supabase
+  .from('orders')
+  .select(`
+    id,
+    session_id,
+    status,
+    created_at,
+    order_items (
+      id,
+      quantity,
+      menu_item_id,
+      buffet_options:menu_item_id (
+        id,
+        name
+      )
+    )
+  `)
+  .order('created_at', { ascending: false });
 
-  // ดึงข้อมูลโต๊ะและออเดอร์ทั้งหมด
-  const fetchData = async () => {
-    try {
-      // 1. ดึงข้อมูลโต๊ะพร้อม Session
-      const { data: tablesData } = await supabase
-        .from('tables')
-        .select(`
-          id,
-          table_number,
-          sessions (
-            id,
-            status,
-            created_at
-          )
-        `)
-        .order('table_number', { ascending: true });
-
+if (orderErr) console.error('Fetch orders error:', orderErr);
       // 2. ดึงข้อมูลออเดอร์พร้อมเมนูอาหาร
       const { data: ordersData } = await supabase
         .from('orders')
