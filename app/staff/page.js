@@ -7,28 +7,26 @@ export default function StaffPage() {
   const [tables, setTables] = useState([]);
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-// ดึงข้อมูลออเดอร์พร้อมเมนูอาหารจาก buffet_options
-const { data: ordersData, error: orderErr } = await supabase
-  .from('orders')
-  .select(`
-    id,
-    session_id,
-    status,
-    created_at,
-    order_items (
-      id,
-      quantity,
-      menu_item_id,
-      buffet_options:menu_item_id (
-        id,
-        name
-      )
-    )
-  `)
-  .order('created_at', { ascending: false });
 
-if (orderErr) console.error('Fetch orders error:', orderErr);
-      // 2. ดึงข้อมูลออเดอร์พร้อมเมนูอาหาร
+  // ดึงข้อมูลโต๊ะและออเดอร์ทั้งหมด
+  const fetchData = async () => {
+    try {
+      // 1. ดึงข้อมูลโต๊ะ โดยเรียง Session ให้เอาอันใหม่ล่าสุดขึ้นก่อน
+      const { data: tablesData } = await supabase
+        .from('tables')
+        .select(`
+          id,
+          table_number,
+          sessions (
+            id,
+            status,
+            created_at
+          )
+        `)
+        .order('created_at', { referencedTable: 'sessions', ascending: false })
+        .order('table_number', { ascending: true });
+
+      // 2. ดึงออเดอร์ทั้งหมด
       const { data: ordersData } = await supabase
         .from('orders')
         .select(`
@@ -40,7 +38,7 @@ if (orderErr) console.error('Fetch orders error:', orderErr);
             id,
             quantity,
             menu_item_id,
-            buffet_options (
+            buffet_options:menu_item_id (
               id,
               name
             )
@@ -59,12 +57,7 @@ if (orderErr) console.error('Fetch orders error:', orderErr);
 
   useEffect(() => {
     fetchData();
-
-    // ตั้งระบบอัปเดตหน้าครัวอัตโนมัติทุกๆ 3 วินาที (Auto-refresh)
-    const interval = setInterval(() => {
-      fetchData();
-    }, 3000);
-
+    const interval = setInterval(fetchData, 3000); // อัปเดตอัตโนมัติทุก 3 วินาที
     return () => clearInterval(interval);
   }, []);
 
@@ -104,9 +97,9 @@ if (orderErr) console.error('Fetch orders error:', orderErr);
       padding: 20,
       fontFamily: '-apple-system, BlinkMacSystemFont, "Kanit", sans-serif'
     }}>
-      <div style={{ maxWidth: 1000, margin: '0 auto' }}>
+      <div style={{ maxWidth: 1100, margin: '0 auto' }}>
         
-        {/* Header */}
+        {/* Header (มีปุ่มเปิดดู QR Code เพิ่มเข้ามาตรงนี้) */}
         <div style={{
           display: 'flex',
           justifyContent: 'space-between',
@@ -122,27 +115,49 @@ if (orderErr) console.error('Fetch orders error:', orderErr);
               🧑‍🍳 หน้าครัว Itim-meow (Live Orders)
             </h1>
             <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#885060' }}>
-              ระบบอัปเดตอัตโนมัติทุก 3 วินาที 🐾
+              อัปเดตอัตโนมัติทุก 3 วินาที 🐾
             </p>
           </div>
-          <button
-            type="button"
-            onClick={fetchData}
-            style={{
-              padding: '10px 18px',
-              borderRadius: 14,
-              border: 'none',
-              backgroundColor: '#FF7597',
-              color: '#FFFFFF',
-              fontWeight: 'bold',
-              cursor: 'pointer'
-            }}>
-            🔄 รีเฟรชทันที
-          </button>
+
+          <div style={{ display: 'flex', gap: 10 }}>
+            {/* ปุ่มเปิดดูและพิมพ์ QR Code ทั้ง 10 โต๊ะ */}
+            <a
+              href="/qr"
+              target="_blank"
+              style={{
+                padding: '10px 18px',
+                borderRadius: 14,
+                backgroundColor: '#4A2E35',
+                color: '#FFFFFF',
+                fontWeight: 'bold',
+                textDecoration: 'none',
+                fontSize: 14,
+                display: 'inline-flex',
+                alignItems: 'center'
+              }}>
+              📱 ดู QR Code ตั้งโต๊ะ
+            </a>
+
+            <button
+              type="button"
+              onClick={fetchData}
+              style={{
+                padding: '10px 18px',
+                borderRadius: 14,
+                border: 'none',
+                backgroundColor: '#FF7597',
+                color: '#FFFFFF',
+                fontWeight: 'bold',
+                fontSize: 14,
+                cursor: 'pointer'
+              }}>
+              🔄 รีเฟรชทันที
+            </button>
+          </div>
         </div>
 
         {/* Table Cards */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 16 }}>
           {tables.map((tbl) => {
             const activeSession = tbl.sessions?.find(s => s.status === 'open' || s.status === 'bill_requested');
             const tableOrders = activeSession
