@@ -14,7 +14,7 @@ export default function StaffPage() {
     try {
       setErrorMessage('');
 
-      // 1. ดึง sessions ที่ open และ bill_requested อยู่ (แก้บั๊กโต๊ะหายตอนกดเช็คบิล)
+      // 1. ดึง sessions ที่ open และ bill_requested
       const { data: sessionsData, error: sessionErr } = await supabase
         .from('sessions')
         .select('*')
@@ -39,7 +39,7 @@ export default function StaffPage() {
           .in('id', tableIds);
         
         (tablesData || []).forEach(t => {
-          tablesMap[t.id] = t.table_number;
+          tablesMap[String(t.id)] = t.table_number;
         });
       }
 
@@ -76,12 +76,13 @@ export default function StaffPage() {
           optionsDataList = optionsData || [];
           
           optionsDataList.forEach(opt => {
-            if (!optionsMap[opt.order_item_id]) optionsMap[opt.order_item_id] = [];
-            optionsMap[opt.order_item_id].push(opt.option_id);
+            const key = String(opt.order_item_id);
+            if (!optionsMap[key]) optionsMap[key] = [];
+            optionsMap[key].push(opt.option_id);
           });
         }
 
-        // รวม ID ทั้งหมด (menu_item_id + option_id) เพื่อนำไปค้นชื่อเมนูจาก buffet_options ในรอบเดียว
+        // รวม ID ทั้งหมด (menu_item_id + option_id) เพื่อดึงชื่อเมนู
         const menuItemIds = (itemsData || []).map(i => i.menu_item_id).filter(Boolean);
         const optionIds = optionsDataList.map(opt => opt.option_id).filter(Boolean);
         const allBuffetIds = Array.from(new Set([...menuItemIds, ...optionIds]));
@@ -94,19 +95,25 @@ export default function StaffPage() {
             .in('id', allBuffetIds);
           
           (buffetData || []).forEach(b => {
-            buffetNameMap[b.id] = b.name;
+            buffetNameMap[String(b.id)] = b.name;
           });
         }
 
-        // ประกอบข้อมูล order_items พร้อมชื่อเมนู
+        // ประกอบข้อมูล order_items
         (itemsData || []).forEach(item => {
-          if (!itemsMap[item.order_id]) itemsMap[item.order_id] = [];
+          const orderKey = String(item.order_id);
+          const itemKey = String(item.id);
+          if (!itemsMap[orderKey]) itemsMap[orderKey] = [];
           
-          const optionNames = (optionsMap[item.id] || []).map(optId => buffetNameMap[optId]).filter(Boolean);
+          const optionNames = (optionsMap[itemKey] || [])
+            .map(optId => buffetNameMap[String(optId)])
+            .filter(Boolean);
 
-          itemsMap[item.order_id].push({
+          const itemName = buffetNameMap[String(item.menu_item_id)] || 'รายการไอศกรีม';
+
+          itemsMap[orderKey].push({
             ...item,
-            name: buffetNameMap[item.menu_item_id] || 'รายการไอศกรีม',
+            name: itemName,
             options: optionNames
           });
         });
@@ -115,15 +122,15 @@ export default function StaffPage() {
       // 5. รวมข้อมูลทั้งหมดเข้าด้วยกัน
       const formattedSessions = sessionsData.map(session => {
         const sessionOrders = (ordersData || [])
-          .filter(o => o.session_id === session.id)
+          .filter(o => String(o.session_id) === String(session.id))
           .map(order => ({
             ...order,
-            items: itemsMap[order.id] || []
+            items: itemsMap[String(order.id)] || []
           }));
 
         return {
           ...session,
-          table_number: tablesMap[session.table_id] || 'ไม่ระบุ',
+          table_number: tablesMap[String(session.table_id)] || 'ไม่ระบุ',
           orders: sessionOrders
         };
       });
@@ -140,9 +147,8 @@ export default function StaffPage() {
   useEffect(() => {
     fetchKitchenData();
 
-    // ฟังเหตุการณ์อัปเดตแบบ Realtime
     const channel = supabase
-      .channel('kitchen_realtime_v4')
+      .channel('kitchen_realtime_v5')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchKitchenData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, fetchKitchenData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, fetchKitchenData)
@@ -160,9 +166,7 @@ export default function StaffPage() {
     try {
       const { error } = await supabase
         .from('sessions')
-        .update({ 
-          status: 'closed'
-        })
+        .update({ status: 'closed' })
         .eq('id', sessionId);
 
       if (error) throw error;
@@ -194,7 +198,7 @@ export default function StaffPage() {
         {/* Header */}
         <div style={{
           display: 'flex',
-          justify: 'space-between',
+          justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: 20,
           backgroundColor: '#FFFFFF',
@@ -283,13 +287,13 @@ export default function StaffPage() {
                   padding: 20,
                   display: 'flex',
                   flexDirection: 'column',
-                  justify: 'space-between'
+                  justifyContent: 'space-between'
                 }}>
                   <div>
                     {/* หัวการ์ดโต๊ะ */}
                     <div style={{
                       display: 'flex',
-                      justify: 'space-between',
+                      justifyContent: 'space-between',
                       alignItems: 'center',
                       paddingBottom: 12,
                       borderBottom: '2px dashed #FFE4EC',
@@ -304,7 +308,6 @@ export default function StaffPage() {
                         </span>
                       </div>
                       
-                      {/* ป้ายเตือนเมื่อมีการเรียกเช็คบิล */}
                       {isBillRequested ? (
                         <span style={{
                           fontSize: 11,
@@ -353,13 +356,11 @@ export default function StaffPage() {
                             ) : (
                               order.items.map((item, i) => (
                                 <div key={item.id || i} style={{ marginBottom: 4 }}>
-                                  {/* แสดงชื่อเมนูพร้อมจำนวน */}
                                   <div style={{ fontSize: 14, fontWeight: 'bold', color: '#4A2E35', display: 'flex', justifyContent: 'space-between' }}>
                                     <span>🍨 {item.name}</span>
                                     <span style={{ color: '#FF5C8A' }}>x{item.quantity || 1}</span>
                                   </div>
 
-                                  {/* แสดงท็อปปิ้งเสริม (ถ้ามี) */}
                                   {item.options && item.options.length > 0 && (
                                     <div style={{ paddingLeft: 12, fontSize: 12, color: '#885060' }}>
                                       {item.options.map((optName, optIdx) => (
@@ -392,7 +393,7 @@ export default function StaffPage() {
                       boxShadow: '0 4px 12px rgba(255, 77, 109, 0.3)',
                       display: 'flex',
                       alignItems: 'center',
-                      justify.content: 'center',
+                      justifyContent: 'center',
                       gap: 6
                     }}>
                     💰 เช็คบิล & ปิดโต๊ะ {session.table_number}
