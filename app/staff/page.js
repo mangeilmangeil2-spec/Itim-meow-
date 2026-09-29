@@ -1,197 +1,105 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { supabase } from '../../lib/supabase';
 
 export default function StaffPage() {
-  const [activeSessions, setActiveSessions] = useState([]);
+  const [tables, setTables] = useState([]);
+  const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [errorMessage, setErrorMessage] = useState('');
 
   // ดึงข้อมูลโต๊ะและออเดอร์ทั้งหมด
-  const fetchKitchenData = async () => {
+  const fetchData = async () => {
     try {
-      setErrorMessage('');
+      // 1. ดึงข้อมูลโต๊ะพร้อม Session
+      const { data: tablesData } = await supabase
+        .from('tables')
+        .select(`
+          id,
+          table_number,
+          sessions (
+            id,
+            status,
+            created_at
+          )
+        `)
+        .order('table_number', { ascending: true });
 
-      // 1. ดึง sessions ที่ open และ bill_requested
-      const { data: sessionsData, error: sessionErr } = await supabase
-        .from('sessions')
-        .select('*')
-        .in('status', ['open', 'bill_requested'])
-        .order('id', { ascending: true });
-
-      if (sessionErr) throw sessionErr;
-
-      if (!sessionsData || sessionsData.length === 0) {
-        setActiveSessions([]);
-        setLoading(false);
-        return;
-      }
-
-      // 2. ดึงข้อมูล tables
-      const tableIds = sessionsData.map(s => s.table_id).filter(Boolean);
-      let tablesMap = {};
-      if (tableIds.length > 0) {
-        const { data: tablesData } = await supabase
-          .from('tables')
-          .select('*')
-          .in('id', tableIds);
-        
-        (tablesData || []).forEach(t => {
-          tablesMap[String(t.id)] = t.table_number;
-        });
-      }
-
-      // 3. ดึง orders ของ sessions เหล่านี้
-      const sessionIds = sessionsData.map(s => s.id);
-      const { data: ordersData, error: ordersErr } = await supabase
+      // 2. ดึงข้อมูลออเดอร์พร้อมเมนูอาหาร
+      const { data: ordersData } = await supabase
         .from('orders')
-        .select('*')
-        .in('session_id', sessionIds)
-        .order('id', { ascending: true });
+        .select(`
+          id,
+          session_id,
+          status,
+          created_at,
+          order_items (
+            id,
+            quantity,
+            menu_item_id,
+            buffet_options (
+              id,
+              name
+            )
+          )
+        `)
+        .order('created_at', { ascending: false });
 
-      if (ordersErr) throw ordersErr;
-
-      // 4. ดึง order_items และ order_item_options
-      const orderIds = (ordersData || []).map(o => o.id);
-      let itemsMap = {};
-      
-      if (orderIds.length > 0) {
-        const { data: itemsData } = await supabase
-          .from('order_items')
-          .select('*')
-          .in('order_id', orderIds);
-
-        const itemIds = (itemsData || []).map(i => i.id);
-        let optionsMap = {};
-        let optionsDataList = [];
-
-        if (itemIds.length > 0) {
-          const { data: optionsData } = await supabase
-            .from('order_item_options')
-            .select('*')
-            .in('order_item_id', itemIds);
-          
-          optionsDataList = optionsData || [];
-          
-          optionsDataList.forEach(opt => {
-            const key = String(opt.order_item_id);
-            if (!optionsMap[key]) optionsMap[key] = [];
-            optionsMap[key].push(opt.option_id);
-          });
-        }
-
-        // รวม ID ทั้งหมด (menu_item_id + option_id) เพื่อดึงชื่อเมนู
-        const menuItemIds = (itemsData || []).map(i => i.menu_item_id).filter(Boolean);
-        const optionIds = optionsDataList.map(opt => opt.option_id).filter(Boolean);
-        const allBuffetIds = Array.from(new Set([...menuItemIds, ...optionIds]));
-
-        let buffetNameMap = {};
-        if (allBuffetIds.length > 0) {
-          const { data: buffetData } = await supabase
-            .from('buffet_options')
-            .select('*')
-            .in('id', allBuffetIds);
-          
-          (buffetData || []).forEach(b => {
-            buffetNameMap[String(b.id)] = b.name;
-          });
-        }
-
-        // ประกอบข้อมูล order_items
-        (itemsData || []).forEach(item => {
-          const orderKey = String(item.order_id);
-          const itemKey = String(item.id);
-          if (!itemsMap[orderKey]) itemsMap[orderKey] = [];
-          
-          const optionNames = (optionsMap[itemKey] || [])
-            .map(optId => buffetNameMap[String(optId)])
-            .filter(Boolean);
-
-          const itemName = buffetNameMap[String(item.menu_item_id)] || 'รายการไอศกรีม';
-
-          itemsMap[orderKey].push({
-            ...item,
-            name: itemName,
-            options: optionNames
-          });
-        });
-      }
-
-      // 5. รวมข้อมูลทั้งหมดเข้าด้วยกัน
-      const formattedSessions = sessionsData.map(session => {
-        const sessionOrders = (ordersData || [])
-          .filter(o => String(o.session_id) === String(session.id))
-          .map(order => ({
-            ...order,
-            items: itemsMap[String(order.id)] || []
-          }));
-
-        return {
-          ...session,
-          table_number: tablesMap[String(session.table_id)] || 'ไม่ระบุ',
-          orders: sessionOrders
-        };
-      });
-
-      setActiveSessions(formattedSessions);
+      setTables(tablesData || []);
+      setOrders(ordersData || []);
     } catch (err) {
-      console.error('Fetch kitchen data error:', err);
-      setErrorMessage(err.message || 'เกิดข้อผิดพลาดในการดึงข้อมูล');
+      console.error('Fetch staff data error:', err);
     } finally {
       setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchKitchenData();
+    fetchData();
 
-    const channel = supabase
-      .channel('kitchen_realtime_v5')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchKitchenData)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, fetchKitchenData)
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, fetchKitchenData)
-      .subscribe();
+    // ตั้งระบบอัปเดตหน้าครัวอัตโนมัติทุกๆ 3 วินาที (Auto-refresh)
+    const interval = setInterval(() => {
+      fetchData();
+    }, 3000);
 
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => clearInterval(interval);
   }, []);
 
-  // ฟังก์ชันเช็คบิล / ปิดโต๊ะ
+  const cleanName = (name) => {
+    if (!name) return '';
+    return name.replace(/^[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{FE00}-\u{FE0F}\s]+/gu, '').trim();
+  };
+
+  // ปิดโต๊ะ & เคลียร์บิล
   const handleCloseSession = async (sessionId, tableNum) => {
-    if (!confirm(`ยืนยันการเช็คบิล/เคลียร์ โต๊ะ ${tableNum} ใช่ไหมเหมียว? 🐾`)) return;
+    if (!confirm(`ยืนยันเช็คบิลและปิดโต๊ะ ${tableNum} ใช่หรือไม่เหมียว? 🧾`)) return;
 
     try {
-      const { error } = await supabase
+      await supabase
         .from('sessions')
         .update({ status: 'closed' })
         .eq('id', sessionId);
 
-      if (error) throw error;
-
-      alert(`เช็คบิล โต๊ะ ${tableNum} เรียบร้อยแล้วครับ! 🎉`);
-      fetchKitchenData();
+      fetchData();
     } catch (err) {
-      alert('เกิดข้อผิดพลาดในการเช็คบิล: ' + err.message);
+      alert('เกิดข้อผิดพลาดในการปิดโต๊ะ: ' + err.message);
     }
   };
 
-  if (loading) return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF0F5', color: '#FF5C8A', fontFamily: 'sans-serif' }}>
-      <div style={{ fontSize: 48, marginBottom: 12 }}>👨‍🍳🐱</div>
-      <div style={{ fontWeight: 'bold', fontSize: 18 }}>กำลังโหลดออเดอร์หน้าครัว...</div>
-    </div>
-  );
+  if (loading) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFF0F3', color: '#FF4D6D', fontFamily: 'sans-serif', fontWeight: 'bold' }}>
+        กำลังโหลดข้อมูลหน้าครัว... 🍨🐱
+      </div>
+    );
+  }
 
   return (
     <div style={{
       minHeight: '100vh',
-      backgroundColor: '#FFF5F7',
-      padding: '24px 16px',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Kanit", "Mitr", sans-serif',
-      color: '#4A2E35'
+      backgroundColor: '#FFF0F3',
+      padding: 20,
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Kanit", sans-serif'
     }}>
       <div style={{ maxWidth: 1000, margin: '0 auto' }}>
         
@@ -200,209 +108,130 @@ export default function StaffPage() {
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
-          marginBottom: 20,
           backgroundColor: '#FFFFFF',
           padding: '16px 24px',
-          borderRadius: 24,
-          border: '2px solid #FFC6D9',
-          boxShadow: '0 4px 16px rgba(255, 182, 193, 0.3)'
+          borderRadius: 20,
+          marginBottom: 20,
+          boxShadow: '0 4px 12px rgba(255, 182, 193, 0.2)'
         }}>
           <div>
-            <h1 style={{ fontSize: 24, fontWeight: '800', color: '#FF5C8A', margin: 0 }}>
-              👨‍🍳 หน้าครัว Itim-meow (Live Orders)
+            <h1 style={{ margin: 0, fontSize: 22, color: '#FF4D6D', fontWeight: '800' }}>
+              🧑‍🍳 หน้าครัว Itim-meow (Live Orders)
             </h1>
-            <p style={{ fontSize: 13, color: '#885060', margin: '4px 0 0 0' }}>
-              รายการออเดอร์และเช็คบิลแบบเรียลไทม์ 🐾
+            <p style={{ margin: '4px 0 0 0', fontSize: 13, color: '#885060' }}>
+              ระบบอัปเดตอัตโนมัติทุก 3 วินาที 🐾
             </p>
           </div>
-          <div style={{ display: 'flex', gap: 10 }}>
-            <button
-              onClick={fetchKitchenData}
-              style={{
-                padding: '10px 16px',
-                borderRadius: 16,
-                border: 'none',
-                backgroundColor: '#FF7597',
-                color: '#FFF',
-                fontWeight: 'bold',
-                fontSize: 14,
-                cursor: 'pointer'
-              }}>
-              🔄 รีเฟรช
-            </button>
-            <Link href="/" style={{ textDecoration: 'none' }}>
-              <button style={{
-                padding: '10px 16px',
-                borderRadius: 16,
-                border: '2px solid #FF9EAA',
-                backgroundColor: '#FFF0F3',
-                color: '#FF5C8A',
-                fontWeight: 'bold',
-                fontSize: 14,
-                cursor: 'pointer'
-              }}>
-                🏠 หน้าเปิดโต๊ะ
-              </button>
-            </Link>
-          </div>
+          <button
+            type="button"
+            onClick={fetchData}
+            style={{
+              padding: '10px 18px',
+              borderRadius: 14,
+              border: 'none',
+              backgroundColor: '#FF7597',
+              color: '#FFFFFF',
+              fontWeight: 'bold',
+              cursor: 'pointer'
+            }}>
+            🔄 รีเฟรชทันที
+          </button>
         </div>
 
-        {errorMessage && (
-          <div style={{ padding: 14, backgroundColor: '#FFEBE9', color: '#D32F2F', borderRadius: 16, marginBottom: 20, fontWeight: 'bold', fontSize: 14 }}>
-            ⚠️ {errorMessage}
-          </div>
-        )}
+        {/* Table Cards */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: 16 }}>
+          {tables.map((tbl) => {
+            const activeSession = tbl.sessions?.find(s => s.status === 'open' || s.status === 'bill_requested');
+            const tableOrders = activeSession
+              ? orders.filter(o => o.session_id === activeSession.id)
+              : [];
 
-        {/* รายการโต๊ะที่เปิดอยู่ */}
-        {activeSessions.length === 0 ? (
-          <div style={{
-            textAlign: 'center',
-            padding: '60px 20px',
-            backgroundColor: '#FFFFFF',
-            borderRadius: 24,
-            border: '2px dashed #FFC6D9',
-            color: '#885060'
-          }}>
-            <div style={{ fontSize: 48, marginBottom: 12 }}>😴🐱</div>
-            <h3 style={{ margin: 0, fontSize: 18 }}>ยังไม่มีโต๊ะที่เปิดอยู่เลยเหมียว</h3>
-            <p style={{ fontSize: 14, marginTop: 6, color: '#A06B78' }}>
-              เปิดโต๊ะใหม่จากหน้าแรกเพื่อเริ่มรับออเดอร์
-            </p>
-          </div>
-        ) : (
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))',
-            gap: 20
-          }}>
-            {activeSessions.map((session) => {
-              const isBillRequested = session.status === 'bill_requested';
-
-              return (
-                <div key={session.id} style={{
+            return (
+              <div
+                key={tbl.id}
+                style={{
                   backgroundColor: '#FFFFFF',
-                  borderRadius: 24,
-                  border: isBillRequested ? '3px solid #FF4D6D' : '3px solid #FFC6D9',
-                  boxShadow: isBillRequested ? '0 6px 20px rgba(255, 77, 109, 0.4)' : '0 6px 20px rgba(255, 182, 193, 0.3)',
-                  padding: 20,
+                  borderRadius: 20,
+                  border: activeSession ? (activeSession.status === 'bill_requested' ? '3px solid #FF3366' : '2px solid #FF7597') : '1px solid #FFE4EC',
+                  padding: 16,
                   display: 'flex',
                   flexDirection: 'column',
-                  justifyContent: 'space-between'
+                  justifyContent: 'space-between',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.04)'
                 }}>
-                  <div>
-                    {/* หัวการ์ดโต๊ะ */}
-                    <div style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      paddingBottom: 12,
-                      borderBottom: '2px dashed #FFE4EC',
-                      marginBottom: 14
-                    }}>
-                      <div>
-                        <span style={{ fontSize: 22, fontWeight: '800', color: '#FF5C8A' }}>
-                          โต๊ะ {session.table_number}
-                        </span>
-                        <span style={{ fontSize: 12, color: '#885060', marginLeft: 8 }}>
-                          ({session.headcount || 1} ท่าน)
-                        </span>
-                      </div>
-                      
-                      {isBillRequested ? (
-                        <span style={{
-                          fontSize: 11,
-                          padding: '4px 10px',
-                          backgroundColor: '#FFEBE9',
-                          color: '#D32F2F',
-                          borderRadius: 12,
-                          fontWeight: 'bold'
-                        }}>
-                          🔔 เรียกเช็คบิล!
-                        </span>
-                      ) : (
-                        <span style={{
-                          fontSize: 11,
-                          padding: '4px 10px',
-                          backgroundColor: '#E8F5E9',
-                          color: '#2E7D32',
-                          borderRadius: 12,
-                          fontWeight: 'bold'
-                        }}>
-                          ● กำลังรับทาน
-                        </span>
-                      )}
-                    </div>
-
-                    {/* รายการออเดอร์ */}
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
-                      {session.orders.length === 0 ? (
-                        <div style={{ fontSize: 13, color: '#A06B78', fontStyle: 'italic', textAlign: 'center', padding: '12px 0' }}>
-                          ยังไม่มีออเดอร์ใหม่เข้ามา 🍦
-                        </div>
-                      ) : (
-                        session.orders.map((order, index) => (
-                          <div key={order.id} style={{
-                            backgroundColor: '#FFF9FA',
-                            borderRadius: 16,
-                            padding: 12,
-                            border: '1px solid #FFD6E5'
-                          }}>
-                            <div style={{ fontSize: 11, fontWeight: 'bold', color: '#FF7597', marginBottom: 6 }}>
-                              ออเดอร์ #{index + 1}
-                            </div>
-
-                            {order.items.length === 0 ? (
-                              <div style={{ fontSize: 13, color: '#4A2E35' }}>🍦 สั่งชุดไอศกรีมบุฟเฟต์</div>
-                            ) : (
-                              order.items.map((item, i) => (
-                                <div key={item.id || i} style={{ marginBottom: 4 }}>
-                                  <div style={{ fontSize: 14, fontWeight: 'bold', color: '#4A2E35', display: 'flex', justifyContent: 'space-between' }}>
-                                    <span>🍨 {item.name}</span>
-                                    <span style={{ color: '#FF5C8A' }}>x{item.quantity || 1}</span>
-                                  </div>
-
-                                  {item.options && item.options.length > 0 && (
-                                    <div style={{ paddingLeft: 12, fontSize: 12, color: '#885060' }}>
-                                      {item.options.map((optName, optIdx) => (
-                                        <div key={optIdx}>+ {optName}</div>
-                                      ))}
-                                    </div>
-                                  )}
-                                </div>
-                              ))
-                            )}
-                          </div>
-                        ))
-                      )}
-                    </div>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                    <h2 style={{ margin: 0, fontSize: 20, color: '#4A2E35', fontWeight: '800' }}>
+                      โต๊ะ {tbl.table_number}
+                    </h2>
+                    {activeSession ? (
+                      <span style={{
+                        padding: '4px 10px',
+                        borderRadius: 12,
+                        fontSize: 12,
+                        fontWeight: 'bold',
+                        backgroundColor: activeSession.status === 'bill_requested' ? '#FFE5E5' : '#E6F4EA',
+                        color: activeSession.status === 'bill_requested' ? '#FF3366' : '#137333'
+                      }}>
+                        {activeSession.status === 'bill_requested' ? '🧾 เรียกเช็คบิล' : '🟢 กำลังรับประทาน'}
+                      </span>
+                    ) : (
+                      <span style={{ padding: '4px 10px', borderRadius: 12, fontSize: 12, backgroundColor: '#F0F0F0', color: '#888' }}>
+                        ⚪ โต๊ะว่าง
+                      </span>
+                    )}
                   </div>
 
-                  {/* ปุ่มเช็คบิล */}
-                  <button
-                    onClick={() => handleCloseSession(session.id, session.table_number)}
-                    style={{
-                      width: '100%',
-                      padding: '12px',
-                      borderRadius: 16,
-                      border: 'none',
-                      backgroundColor: isBillRequested ? '#D32F2F' : '#FF4D6D',
-                      color: '#FFFFFF',
-                      fontSize: 15,
-                      fontWeight: 'bold',
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 12px rgba(255, 77, 109, 0.3)',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      gap: 6
-                    }}>
-                    💰 เช็คบิล & ปิดโต๊ะ {session.table_number}
-                  </button>
+                  {activeSession ? (
+                    tableOrders.length === 0 ? (
+                      <div style={{ padding: '24px 0', textAlign: 'center', color: '#A06B78', fontSize: 13 }}>
+                        ยังไม่มีออเดอร์ใหม่เข้ามา 🍦
+                      </div>
+                    ) : (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, maxHeight: 280, overflowY: 'auto' }}>
+                        {tableOrders.map((ord, idx) => (
+                          <div key={ord.id || idx} style={{ padding: 10, backgroundColor: '#FFF5F7', borderRadius: 12, border: '1px solid #FFE4EC' }}>
+                            <div style={{ fontSize: 11, color: '#885060', marginBottom: 6, fontWeight: 'bold' }}>
+                              ออเดอร์ #{ord.id} ({ord.created_at ? new Date(ord.created_at).toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }) : ''})
+                            </div>
+                            {ord.order_items?.map((item) => (
+                              <div key={item.id} style={{ fontSize: 14, fontWeight: '700', color: '#4A2E35', margin: '2px 0' }}>
+                                • {cleanName(item.buffet_options?.name || 'รายการอาหาร')} <span style={{ color: '#FF4D6D' }}>x{item.quantity}</span>
+                              </div>
+                            ))}
+                          </div>
+                        ))}
+                      </div>
+                    )
+                  ) : (
+                    <div style={{ padding: '24px 0', textAlign: 'center', color: '#CCC', fontSize: 13 }}>
+                      โต๊ะนี้ยังไม่ได้เปิดใช้งาน
+                    </div>
+                  )}
                 </div>
-              );
-            })}
-          </div>
-        )}
+
+                {activeSession && (
+                  <button
+                    type="button"
+                    onClick={() => handleCloseSession(activeSession.id, tbl.table_number)}
+                    style={{
+                      marginTop: 16,
+                      width: '100%',
+                      padding: '10px',
+                      borderRadius: 12,
+                      border: 'none',
+                      backgroundColor: '#FF4D6D',
+                      color: '#FFFFFF',
+                      fontWeight: 'bold',
+                      cursor: 'pointer'
+                    }}>
+                    💰 เช็คบิล & ปิดโต๊ะ {tbl.table_number}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
 
       </div>
     </div>
