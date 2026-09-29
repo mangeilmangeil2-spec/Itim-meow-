@@ -198,7 +198,7 @@ export default function StaffPage() {
         {/* Header */}
         <div style={{
           display: 'flex',
-          justify: 'space-between',
+          justifyContent: 'space-between',
           alignItems: 'center',
           marginBottom: 20,
           backgroundColor: '#FFFFFF',
@@ -287,13 +287,13 @@ export default function StaffPage() {
                   padding: 20,
                   display: 'flex',
                   flexDirection: 'column',
-                  justify: 'space-between'
+                  justifyContent: 'space-between'
                 }}>
                   <div>
                     {/* หัวการ์ดโต๊ะ */}
                     <div style={{
                       display: 'flex',
-                      justify: 'space-between',
+                      justifyContent: 'space-between',
                       alignItems: 'center',
                       paddingBottom: 12,
                       borderBottom: '2px dashed #FFE4EC',
@@ -393,7 +393,7 @@ export default function StaffPage() {
                       boxShadow: '0 4px 12px rgba(255, 77, 109, 0.3)',
                       display: 'flex',
                       alignItems: 'center',
-                      justify: 'center',
+                      justifyContent: 'center',
                       gap: 6
                     }}>
                     💰 เช็คบิล & ปิดโต๊ะ {session.table_number}
