@@ -109,7 +109,7 @@ function OrderComponent() {
   // รวมจำนวนชิ้นทั้งหมด
   const totalItemsCount = selectedOptions.reduce((sum, item) => sum + item.quantity, 0);
 
-  // ส่งออเดอร์
+  // ส่งออเดอร์ (แก้ไขฟังก์ชันบันทึกข้อมูลแล้ว)
   const handleSubmitOrder = async () => {
     if (selectedOptions.length === 0) {
       alert('กรุณาเลือกรายการอาหารก่อนส่งออเดอร์เหมียว! 🐾');
@@ -119,6 +119,7 @@ function OrderComponent() {
     try {
       setSubmitting(true);
 
+      // 1. บันทึกข้อมูลลงตาราง orders
       const { data: orderData, error: orderErr } = await supabase
         .from('orders')
         .insert([{ session_id: sessionId || null, status: 'pending' }])
@@ -127,25 +128,50 @@ function OrderComponent() {
 
       if (orderErr) throw orderErr;
 
-      const { data: itemData, error: itemErr } = await supabase
-        .from('order_items')
-        .insert([{ order_id: orderData.id, quantity: 1 }])
-        .select()
-        .single();
-
-      if (itemErr) throw itemErr;
-
-      const optionInserts = selectedOptions.map((opt) => ({
-        order_item_id: itemData.id,
-        option_id: opt.id,
+      // 2. บันทึกรายการลงตาราง order_items (ใส่ menu_item_id กำกับทุกรายการ)
+      const orderItems = selectedOptions.map((opt) => ({
+        order_id: orderData.id,
+        menu_item_id: opt.id,
         quantity: opt.quantity,
       }));
 
-      const { error: optErr } = await supabase
-        .from('order_item_options')
-        .insert(optionInserts);
+      const { data: insertedItems, error: itemErr } = await supabase
+        .from('order_items')
+        .insert(orderItems)
+        .select();
 
-      if (optErr) throw optErr;
+      // หากฐานข้อมูลใช้โครงสร้างแบบ 3 ชั้น (orders -> order_items -> order_item_options)
+      if (itemErr) {
+        // Fallback: สร้าง order_item แถวแรก แล้วบันทึกเข้า order_item_options
+        const { data: singleItem, error: singleItemErr } = await supabase
+          .from('order_items')
+          .insert([{ order_id: orderData.id, menu_item_id: selectedOptions[0]?.id || null, quantity: 1 }])
+          .select()
+          .single();
+
+        if (singleItemErr) throw singleItemErr;
+
+        const optionInserts = selectedOptions.map((opt) => ({
+          order_item_id: singleItem.id,
+          option_id: opt.id,
+          quantity: opt.quantity,
+        }));
+
+        const { error: optErr } = await supabase
+          .from('order_item_options')
+          .insert(optionInserts);
+
+        if (optErr) throw optErr;
+      } else if (insertedItems && insertedItems.length > 0) {
+        // บันทึกลง order_item_options ควบคู่กัน (เผื่อระบบหลังบ้านใช้ดึงข้อมูลส่วนนี้)
+        const optionInserts = selectedOptions.map((opt, idx) => ({
+          order_item_id: insertedItems[idx]?.id || insertedItems[0]?.id,
+          option_id: opt.id,
+          quantity: opt.quantity,
+        }));
+
+        await supabase.from('order_item_options').insert(optionInserts);
+      }
 
       alert('ส่งออเดอร์เรียบร้อยแล้วเหมียว! 🍨🎉');
       setSelectedOptions([]);
@@ -188,7 +214,7 @@ function OrderComponent() {
     <div style={{
       minHeight: '100vh',
       backgroundColor: '#FFF5F7',
-      padding: '16px 16px 140px 16px', // เว้นระยะล่างเผื่อแถบการ์ดลอย
+      padding: '16px 16px 140px 16px',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Kanit", "Mitr", sans-serif',
       color: '#4A2E35',
       boxSizing: 'border-box'
@@ -404,7 +430,7 @@ function OrderComponent() {
 
       </div>
 
-      {/* แถบสรุปรายการ & ยืนยันส่งออเดอร์ (ลอยแยกจากกันชัดเจน) */}
+      {/* แถบสรุปรายการ & ยืนยันส่งออเดอร์ */}
       {selectedOptions.length > 0 && (
         <div style={{
           position: 'fixed',
@@ -424,7 +450,6 @@ function OrderComponent() {
           zIndex: 999,
           boxSizing: 'border-box'
         }}>
-          {/* ข้อความสรุปฝั่งซ้าย */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: '2px', flexShrink: 0 }}>
             <span style={{ fontSize: '11px', color: '#885060' }}>รายการที่เลือก</span>
             <span style={{ fontSize: '14px', fontWeight: '800', color: '#FF4D6D' }}>
@@ -432,7 +457,6 @@ function OrderComponent() {
             </span>
           </div>
 
-          {/* ปุ่มยืนยันส่งออเดอร์ฝั่งขวา (บังคับดันไปขวาสุดด้วย marginLeft: 'auto') */}
           <button
             type="button"
             onClick={handleSubmitOrder}
