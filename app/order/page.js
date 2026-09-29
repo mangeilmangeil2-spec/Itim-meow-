@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
-import { supabase } from '../../lib/supabase'; // ปรับ Path ตามโครงสร้างโปรเจกต์ของคุณ
+import { supabase } from '../../lib/supabase';
 
 // 1. หมวดหมู่เมนู
 const categories = [
@@ -33,13 +33,55 @@ const getCategoryIcon = (category) => {
 
 function OrderComponent() {
   const searchParams = useSearchParams();
-  const sessionId = searchParams?.get('session_id');
+  const sessionIdParam = searchParams?.get('session_id');
+  const tableParam = searchParams?.get('table');
 
+  const [sessionId, setSessionId] = useState(sessionIdParam || null);
   const [activeCategory, setActiveCategory] = useState('flavor');
   const [buffetOptions, setBuffetOptions] = useState([]);
-  const [selectedOptions, setSelectedOptions] = useState([]); // [{ ...option, quantity: 1 }]
+  const [selectedOptions, setSelectedOptions] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+
+  // ค้นหา session_id อัตโนมัติกรณี URL มีแค่ ?table=X
+  useEffect(() => {
+    async function resolveSession() {
+      if (sessionIdParam) {
+        setSessionId(sessionIdParam);
+        return;
+      }
+
+      if (tableParam) {
+        try {
+          // ดึง session ล่าสุดที่เปิดอยู่ของโต๊ะนี้
+          const { data: tableData } = await supabase
+            .from('tables')
+            .select('id')
+            .eq('table_number', tableParam)
+            .single();
+
+          if (tableData) {
+            const { data: sessionData } = await supabase
+              .from('sessions')
+              .select('id')
+              .eq('table_id', tableData.id)
+              .in('status', ['open', 'bill_requested'])
+              .order('id', { ascending: false })
+              .limit(1)
+              .single();
+
+            if (sessionData) {
+              setSessionId(sessionData.id);
+            }
+          }
+        } catch (err) {
+          console.error('Resolve session error:', err);
+        }
+      }
+    }
+
+    resolveSession();
+  }, [sessionIdParam, tableParam]);
 
   // ดึงข้อมูลเมนู
   useEffect(() => {
@@ -109,7 +151,7 @@ function OrderComponent() {
   // รวมจำนวนชิ้นทั้งหมด
   const totalItemsCount = selectedOptions.reduce((sum, item) => sum + item.quantity, 0);
 
-  // ส่งออเดอร์ (แก้ไขฟังก์ชันบันทึกข้อมูลแล้ว)
+  // ส่งออเดอร์
   const handleSubmitOrder = async () => {
     if (selectedOptions.length === 0) {
       alert('กรุณาเลือกรายการอาหารก่อนส่งออเดอร์เหมียว! 🐾');
@@ -128,50 +170,18 @@ function OrderComponent() {
 
       if (orderErr) throw orderErr;
 
-      // 2. บันทึกรายการลงตาราง order_items (ใส่ menu_item_id กำกับทุกรายการ)
+      // 2. บันทึกรายการลงตาราง order_items
       const orderItems = selectedOptions.map((opt) => ({
         order_id: orderData.id,
         menu_item_id: opt.id,
         quantity: opt.quantity,
       }));
 
-      const { data: insertedItems, error: itemErr } = await supabase
+      const { error: itemErr } = await supabase
         .from('order_items')
-        .insert(orderItems)
-        .select();
+        .insert(orderItems);
 
-      // หากฐานข้อมูลใช้โครงสร้างแบบ 3 ชั้น (orders -> order_items -> order_item_options)
-      if (itemErr) {
-        // Fallback: สร้าง order_item แถวแรก แล้วบันทึกเข้า order_item_options
-        const { data: singleItem, error: singleItemErr } = await supabase
-          .from('order_items')
-          .insert([{ order_id: orderData.id, menu_item_id: selectedOptions[0]?.id || null, quantity: 1 }])
-          .select()
-          .single();
-
-        if (singleItemErr) throw singleItemErr;
-
-        const optionInserts = selectedOptions.map((opt) => ({
-          order_item_id: singleItem.id,
-          option_id: opt.id,
-          quantity: opt.quantity,
-        }));
-
-        const { error: optErr } = await supabase
-          .from('order_item_options')
-          .insert(optionInserts);
-
-        if (optErr) throw optErr;
-      } else if (insertedItems && insertedItems.length > 0) {
-        // บันทึกลง order_item_options ควบคู่กัน (เผื่อระบบหลังบ้านใช้ดึงข้อมูลส่วนนี้)
-        const optionInserts = selectedOptions.map((opt, idx) => ({
-          order_item_id: insertedItems[idx]?.id || insertedItems[0]?.id,
-          option_id: opt.id,
-          quantity: opt.quantity,
-        }));
-
-        await supabase.from('order_item_options').insert(optionInserts);
-      }
+      if (itemErr) throw itemErr;
 
       alert('ส่งออเดอร์เรียบร้อยแล้วเหมียว! 🍨🎉');
       setSelectedOptions([]);
@@ -224,7 +234,7 @@ function OrderComponent() {
         {/* Header ส่วนหัว + ปุ่มเช็คบิล */}
         <div style={{
           display: 'flex',
-          justify: 'space-between',
+          justifyContent: 'space-between',
           alignItems: 'center',
           backgroundColor: '#FFFFFF',
           padding: '14px 18px',
@@ -324,7 +334,7 @@ function OrderComponent() {
                     key={o.id}
                     style={{
                       display: 'flex',
-                      justify: 'space-between',
+                      justifyContent: 'space-between',
                       alignItems: 'center',
                       padding: '12px 16px',
                       borderRadius: 18,
