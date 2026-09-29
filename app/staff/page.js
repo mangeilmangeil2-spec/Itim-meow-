@@ -14,11 +14,11 @@ export default function StaffPage() {
     try {
       setErrorMessage('');
 
-      // 1. ดึง sessions ที่ open อยู่ (จัดเรียงตาม id)
+      // 1. ดึง sessions ที่ open และ bill_requested อยู่ (แก้บั๊กโต๊ะหายตอนกดเช็คบิล)
       const { data: sessionsData, error: sessionErr } = await supabase
         .from('sessions')
         .select('*')
-        .eq('status', 'open')
+        .in('status', ['open', 'bill_requested'])
         .order('id', { ascending: true });
 
       if (sessionErr) throw sessionErr;
@@ -53,7 +53,7 @@ export default function StaffPage() {
 
       if (ordersErr) throw ordersErr;
 
-      // 4. ดึง order_items
+      // 4. ดึง order_items และ order_item_options
       const orderIds = (ordersData || []).map(o => o.id);
       let itemsMap = {};
       
@@ -63,42 +63,51 @@ export default function StaffPage() {
           .select('*')
           .in('order_id', orderIds);
 
-        // ดึง order_item_options (ถ้ามี)
         const itemIds = (itemsData || []).map(i => i.id);
         let optionsMap = {};
+        let optionsDataList = [];
 
         if (itemIds.length > 0) {
           const { data: optionsData } = await supabase
             .from('order_item_options')
             .select('*')
             .in('order_item_id', itemIds);
-
-          // ดึงชื่อท็อปปิ้ง/รสชาติจาก buffet_options
-          const optionIds = (optionsData || []).map(opt => opt.option_id).filter(Boolean);
-          let buffetNameMap = {};
-          if (optionIds.length > 0) {
-            const { data: buffetData } = await supabase
-              .from('buffet_options')
-              .select('*')
-              .in('id', optionIds);
-            
-            (buffetData || []).forEach(b => {
-              buffetNameMap[b.id] = b.name;
-            });
-          }
-
-          (optionsData || []).forEach(opt => {
+          
+          optionsDataList = optionsData || [];
+          
+          optionsDataList.forEach(opt => {
             if (!optionsMap[opt.order_item_id]) optionsMap[opt.order_item_id] = [];
-            optionsMap[opt.order_item_id].push(buffetNameMap[opt.option_id] || 'รายการบุฟเฟต์');
+            optionsMap[opt.order_item_id].push(opt.option_id);
           });
         }
 
-        // รวม items กับ options
+        // รวม ID ทั้งหมด (menu_item_id + option_id) เพื่อนำไปค้นชื่อเมนูจาก buffet_options ในรอบเดียว
+        const menuItemIds = (itemsData || []).map(i => i.menu_item_id).filter(Boolean);
+        const optionIds = optionsDataList.map(opt => opt.option_id).filter(Boolean);
+        const allBuffetIds = Array.from(new Set([...menuItemIds, ...optionIds]));
+
+        let buffetNameMap = {};
+        if (allBuffetIds.length > 0) {
+          const { data: buffetData } = await supabase
+            .from('buffet_options')
+            .select('*')
+            .in('id', allBuffetIds);
+          
+          (buffetData || []).forEach(b => {
+            buffetNameMap[b.id] = b.name;
+          });
+        }
+
+        // ประกอบข้อมูล order_items พร้อมชื่อเมนู
         (itemsData || []).forEach(item => {
           if (!itemsMap[item.order_id]) itemsMap[item.order_id] = [];
+          
+          const optionNames = (optionsMap[item.id] || []).map(optId => buffetNameMap[optId]).filter(Boolean);
+
           itemsMap[item.order_id].push({
             ...item,
-            options: optionsMap[item.id] || []
+            name: buffetNameMap[item.menu_item_id] || 'รายการไอศกรีม',
+            options: optionNames
           });
         });
       }
@@ -133,7 +142,7 @@ export default function StaffPage() {
 
     // ฟังเหตุการณ์อัปเดตแบบ Realtime
     const channel = supabase
-      .channel('kitchen_realtime_v3')
+      .channel('kitchen_realtime_v4')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders' }, fetchKitchenData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'order_items' }, fetchKitchenData)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'sessions' }, fetchKitchenData)
@@ -262,114 +271,135 @@ export default function StaffPage() {
             gridTemplateColumns: 'repeat(auto-fill, minmax(310px, 1fr))',
             gap: 20
           }}>
-            {activeSessions.map((session) => (
-              <div key={session.id} style={{
-                backgroundColor: '#FFFFFF',
-                borderRadius: 24,
-                border: '3px solid #FFC6D9',
-                boxShadow: '0 6px 20px rgba(255, 182, 193, 0.3)',
-                padding: 20,
-                display: 'flex',
-                flexDirection: 'column',
-                justify: 'space-between'
-              }}>
-                <div>
-                  {/* หัวการ์ดโต๊ะ */}
-                  <div style={{
-                    display: 'flex',
-                    justify: 'space-between',
-                    alignItems: 'center',
-                    paddingBottom: 12,
-                    borderBottom: '2px dashed #FFE4EC',
-                    marginBottom: 14
-                  }}>
-                    <div>
-                      <span style={{ fontSize: 22, fontWeight: '800', color: '#FF5C8A' }}>
-                        โต๊ะ {session.table_number}
-                      </span>
-                      <span style={{ fontSize: 12, color: '#885060', marginLeft: 8 }}>
-                        ({session.headcount || 1} ท่าน)
-                      </span>
-                    </div>
-                    <span style={{
-                      fontSize: 11,
-                      padding: '4px 10px',
-                      backgroundColor: '#E8F5E9',
-                      color: '#2E7D32',
-                      borderRadius: 12,
-                      fontWeight: 'bold'
+            {activeSessions.map((session) => {
+              const isBillRequested = session.status === 'bill_requested';
+
+              return (
+                <div key={session.id} style={{
+                  backgroundColor: '#FFFFFF',
+                  borderRadius: 24,
+                  border: isBillRequested ? '3px solid #FF4D6D' : '3px solid #FFC6D9',
+                  boxShadow: isBillRequested ? '0 6px 20px rgba(255, 77, 109, 0.4)' : '0 6px 20px rgba(255, 182, 193, 0.3)',
+                  padding: 20,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justify: 'space-between'
+                }}>
+                  <div>
+                    {/* หัวการ์ดโต๊ะ */}
+                    <div style={{
+                      display: 'flex',
+                      justify: 'space-between',
+                      alignItems: 'center',
+                      paddingBottom: 12,
+                      borderBottom: '2px dashed #FFE4EC',
+                      marginBottom: 14
                     }}>
-                      ● กำลังรับทาน
-                    </span>
-                  </div>
-
-                  {/* รายการออเดอร์ */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
-                    {session.orders.length === 0 ? (
-                      <div style={{ fontSize: 13, color: '#A06B78', fontStyle: 'italic', textAlign: 'center', padding: '12px 0' }}>
-                        ยังไม่มีออเดอร์ใหม่เข้ามา 🍦
+                      <div>
+                        <span style={{ fontSize: 22, fontWeight: '800', color: '#FF5C8A' }}>
+                          โต๊ะ {session.table_number}
+                        </span>
+                        <span style={{ fontSize: 12, color: '#885060', marginLeft: 8 }}>
+                          ({session.headcount || 1} ท่าน)
+                        </span>
                       </div>
-                    ) : (
-                      session.orders.map((order, index) => (
-                        <div key={order.id} style={{
-                          backgroundColor: '#FFF9FA',
-                          borderRadius: 16,
-                          padding: 12,
-                          border: '1px solid #FFD6E5'
+                      
+                      {/* ป้ายเตือนเมื่อมีการเรียกเช็คบิล */}
+                      {isBillRequested ? (
+                        <span style={{
+                          fontSize: 11,
+                          padding: '4px 10px',
+                          backgroundColor: '#FFEBE9',
+                          color: '#D32F2F',
+                          borderRadius: 12,
+                          fontWeight: 'bold'
                         }}>
-                          <div style={{ fontSize: 11, fontWeight: 'bold', color: '#FF7597', marginBottom: 6 }}>
-                            ออเดอร์ #{index + 1}
-                          </div>
+                          🔔 เรียกเช็คบิล!
+                        </span>
+                      ) : (
+                        <span style={{
+                          fontSize: 11,
+                          padding: '4px 10px',
+                          backgroundColor: '#E8F5E9',
+                          color: '#2E7D32',
+                          borderRadius: 12,
+                          fontWeight: 'bold'
+                        }}>
+                          ● กำลังรับทาน
+                        </span>
+                      )}
+                    </div>
 
-                          {order.items.length === 0 ? (
-                            <div style={{ fontSize: 13, color: '#4A2E35' }}>🍦 สั่งชุดไอศกรีมบุฟเฟต์</div>
-                          ) : (
-                            order.items.map((item, i) => (
-                              <div key={item.id || i} style={{ marginBottom: 4 }}>
-                                {item.options && item.options.length > 0 ? (
-                                  item.options.map((optName, optIdx) => (
-                                    <div key={optIdx} style={{ fontSize: 14, fontWeight: 'bold', color: '#4A2E35', display: 'flex', justifyContent: 'space-between' }}>
-                                      <span>🍨 {optName}</span>
-                                      <span style={{ color: '#FF5C8A' }}>x1</span>
-                                    </div>
-                                  ))
-                                ) : (
-                                  <div style={{ fontSize: 14, fontWeight: 'bold', color: '#4A2E35' }}>
-                                    🍦 รายการไอศกรีม x {item.quantity || 1}
-                                  </div>
-                                )}
-                              </div>
-                            ))
-                          )}
+                    {/* รายการออเดอร์ */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
+                      {session.orders.length === 0 ? (
+                        <div style={{ fontSize: 13, color: '#A06B78', fontStyle: 'italic', textAlign: 'center', padding: '12px 0' }}>
+                          ยังไม่มีออเดอร์ใหม่เข้ามา 🍦
                         </div>
-                      ))
-                    )}
-                  </div>
-                </div>
+                      ) : (
+                        session.orders.map((order, index) => (
+                          <div key={order.id} style={{
+                            backgroundColor: '#FFF9FA',
+                            borderRadius: 16,
+                            padding: 12,
+                            border: '1px solid #FFD6E5'
+                          }}>
+                            <div style={{ fontSize: 11, fontWeight: 'bold', color: '#FF7597', marginBottom: 6 }}>
+                              ออเดอร์ #{index + 1}
+                            </div>
 
-                {/* ปุ่มเช็คบิล */}
-                <button
-                  onClick={() => handleCloseSession(session.id, session.table_number)}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    borderRadius: 16,
-                    border: 'none',
-                    backgroundColor: '#FF4D6D',
-                    color: '#FFFFFF',
-                    fontSize: 15,
-                    fontWeight: 'bold',
-                    cursor: 'pointer',
-                    boxShadow: '0 4px 12px rgba(255, 77, 109, 0.3)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    gap: 6
-                  }}>
-                  💰 เช็คบิล & ปิดโต๊ะ {session.table_number}
-                </button>
-              </div>
-            ))}
+                            {order.items.length === 0 ? (
+                              <div style={{ fontSize: 13, color: '#4A2E35' }}>🍦 สั่งชุดไอศกรีมบุฟเฟต์</div>
+                            ) : (
+                              order.items.map((item, i) => (
+                                <div key={item.id || i} style={{ marginBottom: 4 }}>
+                                  {/* แสดงชื่อเมนูพร้อมจำนวน */}
+                                  <div style={{ fontSize: 14, fontWeight: 'bold', color: '#4A2E35', display: 'flex', justifyContent: 'space-between' }}>
+                                    <span>🍨 {item.name}</span>
+                                    <span style={{ color: '#FF5C8A' }}>x{item.quantity || 1}</span>
+                                  </div>
+
+                                  {/* แสดงท็อปปิ้งเสริม (ถ้ามี) */}
+                                  {item.options && item.options.length > 0 && (
+                                    <div style={{ paddingLeft: 12, fontSize: 12, color: '#885060' }}>
+                                      {item.options.map((optName, optIdx) => (
+                                        <div key={optIdx}>+ {optName}</div>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        ))
+                      )}
+                    </div>
+                  </div>
+
+                  {/* ปุ่มเช็คบิล */}
+                  <button
+                    onClick={() => handleCloseSession(session.id, session.table_number)}
+                    style={{
+                      width: '100%',
+                      padding: '12px',
+                      borderRadius: 16,
+                      border: 'none',
+                      backgroundColor: isBillRequested ? '#D32F2F' : '#FF4D6D',
+                      color: '#FFFFFF',
+                      fontSize: 15,
+                      fontWeight: 'bold',
+                      cursor: 'pointer',
+                      boxShadow: '0 4px 12px rgba(255, 77, 109, 0.3)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justify.content: 'center',
+                      gap: 6
+                    }}>
+                    💰 เช็คบิล & ปิดโต๊ะ {session.table_number}
+                  </button>
+                </div>
+              );
+            })}
           </div>
         )}
 
